@@ -73,6 +73,12 @@ npm run prisma:studio
     - `sort` (`new`, `budget`, `budget_asc`, `budget_desc`)
 - `GET /tasks/:id`
   - header: `Authorization: Bearer <token>`
+  - в ответе есть `assignment`:
+    - `null`, если исполнитель еще не выбран
+    - `{ id, customerId, executorId }`, если выбор уже сделан
+- `GET /tasks/:id/status-history`
+  - header: `Authorization: Bearer <token>`
+  - возвращает массив переходов статусов (`fromStatus`, `toStatus`, `changedByUser`, `comment`, `createdAt`)
 - `PATCH /tasks/:id`
   - header: `Authorization: Bearer <token>`
   - only owner and only if task status is `OPEN`

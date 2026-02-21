@@ -70,6 +70,13 @@ const taskSelect = {
       displayName: true,
     },
   },
+  assignment: {
+    select: {
+      id: true,
+      customerId: true,
+      executorId: true,
+    },
+  },
 } satisfies Prisma.TaskSelect;
 
 const proposalSelect = {
@@ -90,9 +97,29 @@ const proposalSelect = {
   },
 } satisfies Prisma.ProposalSelect;
 
+const statusHistorySelect = {
+  id: true,
+  taskId: true,
+  fromStatus: true,
+  toStatus: true,
+  changedBy: true,
+  comment: true,
+  createdAt: true,
+  changedByUser: {
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+    },
+  },
+} satisfies Prisma.TaskStatusHistorySelect;
+
 type TaskView = Prisma.TaskGetPayload<{ select: typeof taskSelect }>;
 type ProposalView = Prisma.ProposalGetPayload<{
   select: typeof proposalSelect;
+}>;
+type TaskStatusHistoryView = Prisma.TaskStatusHistoryGetPayload<{
+  select: typeof statusHistorySelect;
 }>;
 
 const normalizeString = (value: string): string => value.trim();
@@ -340,6 +367,13 @@ const mapTask = (task: TaskView) => ({
         displayName: task.customer.displayName,
       }
     : null,
+  assignment: task.assignment
+    ? {
+        id: task.assignment.id,
+        customerId: task.assignment.customerId,
+        executorId: task.assignment.executorId,
+      }
+    : null,
 });
 
 const mapProposal = (proposal: ProposalView) => ({
@@ -358,6 +392,21 @@ const mapProposal = (proposal: ProposalView) => ({
         displayName: proposal.executor.displayName,
       }
     : null,
+});
+
+const mapTaskStatusHistory = (entry: TaskStatusHistoryView) => ({
+  id: entry.id,
+  taskId: entry.taskId,
+  fromStatus: entry.fromStatus,
+  toStatus: entry.toStatus,
+  changedBy: entry.changedBy,
+  comment: entry.comment,
+  createdAt: entry.createdAt.toISOString(),
+  changedByUser: {
+    id: entry.changedByUser.id,
+    username: entry.changedByUser.username,
+    displayName: entry.changedByUser.displayName,
+  },
 });
 
 const getTaskOrThrow = async (taskId: string): Promise<TaskView> => {
@@ -1055,6 +1104,26 @@ tasksRouter.post("/:id/reject-review", requireAuth, async (req, res, next) => {
 
     res.status(200).json({
       task: mapTask(task),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+tasksRouter.get("/:id/status-history", requireAuth, async (req, res, next) => {
+  try {
+    const taskId = parseTaskIdOrThrow(req.params.id);
+
+    await getTaskOrThrow(taskId);
+
+    const entries = await prisma.taskStatusHistory.findMany({
+      where: { taskId },
+      orderBy: { createdAt: "desc" },
+      select: statusHistorySelect,
+    });
+
+    res.status(200).json({
+      items: entries.map(mapTaskStatusHistory),
     });
   } catch (error) {
     next(error);

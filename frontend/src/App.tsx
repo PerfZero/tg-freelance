@@ -78,6 +78,26 @@ type TaskItem = {
     username: string | null;
     displayName: string;
   } | null;
+  assignment: {
+    id: string;
+    customerId: string;
+    executorId: string;
+  } | null;
+};
+
+type TaskStatusHistoryItem = {
+  id: string;
+  taskId: string;
+  fromStatus: TaskStatusValue | null;
+  toStatus: TaskStatusValue;
+  changedBy: string;
+  comment: string | null;
+  createdAt: string;
+  changedByUser: {
+    id: string;
+    username: string | null;
+    displayName: string;
+  };
 };
 
 type ProposalItem = {
@@ -475,6 +495,19 @@ function App() {
   const [detailTask, setDetailTask] = useState<TaskItem | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [statusHistory, setStatusHistory] = useState<TaskStatusHistoryItem[]>(
+    [],
+  );
+  const [statusHistoryLoading, setStatusHistoryLoading] = useState(false);
+  const [statusHistoryError, setStatusHistoryError] = useState<string | null>(
+    null,
+  );
+  const [statusActionPending, setStatusActionPending] = useState(false);
+  const [statusActionError, setStatusActionError] = useState<string | null>(
+    null,
+  );
+  const [rejectReviewMode, setRejectReviewMode] = useState(false);
+  const [rejectReviewComment, setRejectReviewComment] = useState("");
 
   const [editMode, setEditMode] = useState(false);
   const [editPending, setEditPending] = useState(false);
@@ -514,6 +547,36 @@ function App() {
       proposals.find((proposal) => proposal.executorId === authUser.id) ?? null
     );
   }, [proposals, authUser]);
+
+  const requestStatusHistory = (taskId: string, authToken: string) =>
+    apiRequest<{ items: TaskStatusHistoryItem[] }>(
+      `/tasks/${taskId}/status-history`,
+      {},
+      authToken,
+    );
+
+  const refreshStatusHistory = async (): Promise<void> => {
+    if (!token || !detailTaskId) {
+      return;
+    }
+
+    try {
+      setStatusHistoryLoading(true);
+      setStatusHistoryError(null);
+
+      const response = await requestStatusHistory(detailTaskId, token);
+      setStatusHistory(response.items);
+    } catch (error) {
+      setStatusHistory([]);
+      setStatusHistoryError(
+        error instanceof Error
+          ? error.message
+          : "Не удалось загрузить историю статусов",
+      );
+    } finally {
+      setStatusHistoryLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (location.pathname === "/") {
@@ -655,6 +718,13 @@ function App() {
   useEffect(() => {
     setDetailTask(null);
     setDetailError(null);
+    setStatusHistory([]);
+    setStatusHistoryLoading(false);
+    setStatusHistoryError(null);
+    setStatusActionPending(false);
+    setStatusActionError(null);
+    setRejectReviewMode(false);
+    setRejectReviewComment("");
     setEditMode(false);
     setEditError(null);
     setProposals([]);
@@ -675,8 +745,10 @@ function App() {
       try {
         setDetailLoading(true);
         setProposalsLoading(true);
+        setStatusHistoryLoading(true);
         setDetailError(null);
         setProposalsError(null);
+        setStatusHistoryError(null);
 
         const taskResponse = await apiRequest<{ task: TaskItem }>(
           `/tasks/${detailTaskId}`,
@@ -697,6 +769,30 @@ function App() {
           deadlineAt: toInputDateTimeValue(taskResponse.task.deadlineAt),
           tags: taskResponse.task.tags.join(", "),
         });
+
+        try {
+          const statusHistoryResponse = await requestStatusHistory(
+            detailTaskId,
+            token,
+          );
+
+          if (!active) {
+            return;
+          }
+
+          setStatusHistory(statusHistoryResponse.items);
+        } catch (error) {
+          if (!active) {
+            return;
+          }
+
+          setStatusHistory([]);
+          setStatusHistoryError(
+            error instanceof Error
+              ? error.message
+              : "Не удалось загрузить историю статусов",
+          );
+        }
 
         try {
           const proposalsResponse = await apiRequest<{ items: ProposalItem[] }>(
@@ -744,6 +840,7 @@ function App() {
         if (active) {
           setDetailLoading(false);
           setProposalsLoading(false);
+          setStatusHistoryLoading(false);
         }
       }
     };
@@ -899,12 +996,118 @@ function App() {
       );
 
       setDetailTask(response.task);
+      await refreshStatusHistory();
       setEditMode(false);
       setPage(1);
     } catch (error) {
       setDetailError(
         error instanceof Error ? error.message : "Не удалось отменить задачу",
       );
+    }
+  };
+
+  const handleSendToReview = async (): Promise<void> => {
+    if (!token || !detailTaskId) {
+      return;
+    }
+
+    try {
+      setStatusActionPending(true);
+      setStatusActionError(null);
+
+      const response = await apiRequest<{ task: TaskItem }>(
+        `/tasks/${detailTaskId}/send-to-review`,
+        {
+          method: "POST",
+        },
+        token,
+      );
+
+      setDetailTask(response.task);
+      setRejectReviewMode(false);
+      setRejectReviewComment("");
+      await refreshStatusHistory();
+    } catch (error) {
+      setStatusActionError(
+        error instanceof Error
+          ? error.message
+          : "Не удалось отправить задачу на проверку",
+      );
+    } finally {
+      setStatusActionPending(false);
+    }
+  };
+
+  const handleApproveTask = async (): Promise<void> => {
+    if (!token || !detailTaskId) {
+      return;
+    }
+
+    try {
+      setStatusActionPending(true);
+      setStatusActionError(null);
+
+      const response = await apiRequest<{ task: TaskItem }>(
+        `/tasks/${detailTaskId}/approve`,
+        {
+          method: "POST",
+        },
+        token,
+      );
+
+      setDetailTask(response.task);
+      setRejectReviewMode(false);
+      setRejectReviewComment("");
+      await refreshStatusHistory();
+    } catch (error) {
+      setStatusActionError(
+        error instanceof Error
+          ? error.message
+          : "Не удалось подтвердить задачу",
+      );
+    } finally {
+      setStatusActionPending(false);
+    }
+  };
+
+  const handleRejectReview = async (): Promise<void> => {
+    if (!token || !detailTaskId) {
+      return;
+    }
+
+    const normalizedComment = rejectReviewComment.trim();
+    if (!normalizedComment) {
+      setStatusActionError(
+        "Укажи комментарий, почему задача возвращается в работу.",
+      );
+      return;
+    }
+
+    try {
+      setStatusActionPending(true);
+      setStatusActionError(null);
+
+      const response = await apiRequest<{ task: TaskItem }>(
+        `/tasks/${detailTaskId}/reject-review`,
+        {
+          method: "POST",
+          body: JSON.stringify({ comment: normalizedComment }),
+        },
+        token,
+      );
+
+      setDetailTask(response.task);
+      setRejectReviewMode(false);
+      setRejectReviewComment("");
+      await refreshStatusHistory();
+    } catch (error) {
+      setStatusActionError(
+        error instanceof Error
+          ? error.message
+          : "Не удалось вернуть задачу в работу",
+      );
+    } finally {
+      setStatusActionPending(false);
     }
   };
 
@@ -1047,6 +1250,7 @@ function App() {
       );
 
       setDetailTask(response.task);
+      await refreshStatusHistory();
     } catch (error) {
       setProposalsError(
         error instanceof Error
@@ -1592,6 +1796,15 @@ function App() {
     }
 
     const canEdit = isDetailOwner && detailTask.status === "OPEN";
+    const isAssignedExecutor = Boolean(
+      authUser &&
+      detailTask.assignment &&
+      detailTask.assignment.executorId === authUser.id,
+    );
+    const canSendToReview =
+      isAssignedExecutor && detailTask.status === "IN_PROGRESS";
+    const canApproveOrReject =
+      isDetailOwner && detailTask.status === "ON_REVIEW";
 
     return (
       <>
@@ -1640,6 +1853,129 @@ function App() {
               </Button>
             ) : null}
           </div>
+        </Section>
+
+        {canSendToReview || canApproveOrReject || rejectReviewMode ? (
+          <Section
+            header="Действия по статусу"
+            footer="Статус задачи меняют только участники, которым это разрешено по роли."
+          >
+            {canSendToReview ? (
+              <Button
+                mode="filled"
+                size="m"
+                disabled={statusActionPending}
+                onClick={() => {
+                  void handleSendToReview();
+                }}
+              >
+                {statusActionPending
+                  ? "Отправляем..."
+                  : "Отправить на проверку"}
+              </Button>
+            ) : null}
+
+            {canApproveOrReject ? (
+              <>
+                <div className="row-actions">
+                  <Button
+                    mode="filled"
+                    size="m"
+                    disabled={statusActionPending}
+                    onClick={() => {
+                      void handleApproveTask();
+                    }}
+                  >
+                    {statusActionPending
+                      ? "Подтверждаем..."
+                      : "Подтвердить выполнение"}
+                  </Button>
+                  <Button
+                    mode="bezeled"
+                    size="m"
+                    disabled={statusActionPending}
+                    onClick={() => {
+                      setStatusActionError(null);
+                      setRejectReviewMode((prev) => !prev);
+                    }}
+                  >
+                    {rejectReviewMode ? "Скрыть форму" : "Вернуть в работу"}
+                  </Button>
+                </div>
+
+                {rejectReviewMode ? (
+                  <div className="form-grid">
+                    <Textarea
+                      header="Комментарий для исполнителя"
+                      placeholder="Например: нужно поправить мобильную верстку и форму отправки."
+                      value={rejectReviewComment}
+                      onChange={(event) => {
+                        setRejectReviewComment(event.target.value);
+                      }}
+                    />
+                    <div className="row-actions row-actions-tight">
+                      <Button
+                        mode="outline"
+                        size="m"
+                        disabled={statusActionPending}
+                        onClick={() => {
+                          void handleRejectReview();
+                        }}
+                      >
+                        {statusActionPending
+                          ? "Возвращаем..."
+                          : "Подтвердить возврат в работу"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+
+            {statusActionError ? (
+              <p className="error-text">{statusActionError}</p>
+            ) : null}
+          </Section>
+        ) : null}
+
+        <Section
+          header="История статусов"
+          footer="Последние изменения показываются сверху."
+        >
+          {statusHistoryLoading ? (
+            <Placeholder header="Загрузка" description="Получаем историю..." />
+          ) : statusHistoryError ? (
+            <Placeholder header="Ошибка" description={statusHistoryError} />
+          ) : statusHistory.length === 0 ? (
+            <Placeholder
+              header="История пуста"
+              description="Переходы статуса появятся после действий по задаче."
+            />
+          ) : (
+            <div className="status-history-list">
+              {statusHistory.map((entry) => {
+                const actorLabel = entry.changedByUser.username
+                  ? `@${entry.changedByUser.username}`
+                  : entry.changedByUser.displayName;
+
+                return (
+                  <div key={entry.id} className="status-history-card">
+                    <p className="status-history-line">
+                      {entry.fromStatus
+                        ? `${getStatusLabel(entry.fromStatus)} -> ${getStatusLabel(entry.toStatus)}`
+                        : `Создана -> ${getStatusLabel(entry.toStatus)}`}
+                    </p>
+                    <p className="status-history-meta">
+                      {formatDate(entry.createdAt)} • {actorLabel}
+                    </p>
+                    {entry.comment ? (
+                      <p className="status-history-comment">{entry.comment}</p>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </Section>
 
         {editMode ? (

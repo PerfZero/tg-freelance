@@ -380,6 +380,37 @@
     margin-top: 10px;
 }
 
+.status-history-list {
+    display: grid;
+    gap: 8px;
+}
+
+.status-history-card {
+    border: 1px solid
+        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.12));
+    border-radius: 12px;
+    padding: 10px 11px;
+    background: var(--tg-theme-bg-color, #ffffff);
+}
+
+.status-history-line {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.status-history-meta {
+    margin: 4px 0 0;
+    color: var(--tg-theme-hint-color, #788898);
+    font-size: 13px;
+}
+
+.status-history-comment {
+    margin: 8px 0 0;
+    font-size: 14px;
+    line-height: 1.35;
+}
+
 .error-text {
     margin: 2px 0 0;
     color: var(--tg-theme-destructive-text-color, #cc4b4b);
