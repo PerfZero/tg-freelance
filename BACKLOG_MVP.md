@@ -175,5 +175,5 @@
 
 ## 8. Текущий прогресс
 - [x] `E0-T1` Инициализирован backend-каркас (`Express + TypeScript`, env, модульная структура, `GET /health`).
-- [ ] `E0-T2` Поднять PostgreSQL и миграции (Prisma), создать базовые enum и таблицы.
+- [x] `E0-T2` Поднят PostgreSQL (docker compose), подключен Prisma, создана и применена миграция `init`.
 - [ ] `E0-T3` Инициализировать frontend (React + Vite + TypeScript), подключить Telegram WebApp SDK.

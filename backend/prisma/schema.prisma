@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  ON_REVIEW
+  COMPLETED
+  CANCELED
+}
+
+model User {
+  id                  String              @id @default(uuid()) @db.Uuid
+  telegramId          BigInt              @unique @map("telegram_id")
+  username            String?
+  displayName         String              @map("display_name")
+  roleFlags           Json                @map("role_flags")
+  isBlocked           Boolean             @default(false) @map("is_blocked")
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+  profile             Profile?
+  customerTasks       Task[]              @relation("CustomerTasks")
+  executorProposals   Proposal[]          @relation("ExecutorProposals")
+  customerAssignments Assignment[]        @relation("CustomerAssignments")
+  executorAssignments Assignment[]        @relation("ExecutorAssignments")
+  changedTaskStatuses TaskStatusHistory[] @relation("ChangedTaskStatuses")
+
+  @@map("users")
+}
+
+model Profile {
+  userId              String   @id @map("user_id") @db.Uuid
+  about               String?
+  skills              String[]
+  rating              Decimal  @default(0) @db.Decimal(3, 2)
+  completedTasksCount Int      @default(0) @map("completed_tasks_count")
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model Task {
+  id                   String              @id @default(uuid()) @db.Uuid
+  customerId           String              @map("customer_id") @db.Uuid
+  title                String
+  description          String
+  budget               Decimal             @db.Decimal(12, 2)
+  deadlineAt           DateTime?           @map("deadline_at")
+  category             String
+  tags                 String[]
+  status               TaskStatus
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+  customer             User                @relation("CustomerTasks", fields: [customerId], references: [id], onDelete: Restrict)
+  proposals            Proposal[]
+  assignment           Assignment?
+  statusHistoryEntries TaskStatusHistory[]
+
+  @@index([customerId])
+  @@index([status])
+  @@map("tasks")
+}
+
+model Proposal {
+  id         String      @id @default(uuid()) @db.Uuid
+  taskId     String      @map("task_id") @db.Uuid
+  executorId String      @map("executor_id") @db.Uuid
+  price      Decimal     @db.Decimal(12, 2)
+  comment    String
+  etaDays    Int         @map("eta_days")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+  task       Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  executor   User        @relation("ExecutorProposals", fields: [executorId], references: [id], onDelete: Restrict)
+  assignment Assignment?
+
+  @@unique([taskId, executorId])
+  @@index([taskId])
+  @@index([executorId])
+  @@map("proposals")
+}
+
+model Assignment {
+  id                 String   @id @default(uuid()) @db.Uuid
+  taskId             String   @unique @map("task_id") @db.Uuid
+  customerId         String   @map("customer_id") @db.Uuid
+  executorId         String   @map("executor_id") @db.Uuid
+  selectedProposalId String   @unique @map("selected_proposal_id") @db.Uuid
+  createdAt          DateTime @default(now()) @map("created_at")
+  task               Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  customer           User     @relation("CustomerAssignments", fields: [customerId], references: [id], onDelete: Restrict)
+  executor           User     @relation("ExecutorAssignments", fields: [executorId], references: [id], onDelete: Restrict)
+  selectedProposal   Proposal @relation(fields: [selectedProposalId], references: [id], onDelete: Restrict)
+
+  @@index([customerId])
+  @@index([executorId])
+  @@map("assignments")
+}
+
+model TaskStatusHistory {
+  id            String      @id @default(uuid()) @db.Uuid
+  taskId        String      @map("task_id") @db.Uuid
+  fromStatus    TaskStatus? @map("from_status")
+  toStatus      TaskStatus  @map("to_status")
+  changedBy     String      @map("changed_by") @db.Uuid
+  comment       String?
+  createdAt     DateTime    @default(now()) @map("created_at")
+  task          Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  changedByUser User        @relation("ChangedTaskStatuses", fields: [changedBy], references: [id], onDelete: Restrict)
+
+  @@index([taskId])
+  @@index([changedBy])
+  @@map("task_status_history")
+}

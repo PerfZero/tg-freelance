@@ -7,6 +7,8 @@ Express + TypeScript API для TG Freelance Mini App.
 ```bash
 cp .env.example .env
 npm install
+docker compose up -d postgres
+npm run prisma:migrate -- --name init
 npm run dev
 ```
 
@@ -19,6 +21,9 @@ npm run dev
 npm run build
 npm run start
 npm run typecheck
+npm run prisma:generate
+npm run prisma:migrate -- --name <migration_name>
+npm run prisma:studio
 ```
 
 ## Структура

@@ -11,6 +11,7 @@ const toInt = (value: string | undefined, fallback: number): number => {
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: toInt(process.env.PORT, 3001),
+  databaseUrl: process.env.DATABASE_URL ?? "",
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
-  jwtSecret: process.env.JWT_SECRET ?? ""
+  jwtSecret: process.env.JWT_SECRET ?? "",
 };
