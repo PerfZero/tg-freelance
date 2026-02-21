@@ -5,6 +5,7 @@ REPO_DIR="${REPO_DIR:-/opt/tg-freelance}"
 WEB_ROOT="${WEB_ROOT:-/var/www/tg-freelance}"
 
 cd "$REPO_DIR/frontend"
+rm -rf node_modules
 npm ci
 npm run build
 
