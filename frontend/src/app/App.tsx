@@ -5,17 +5,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import {
-  ArrowLeft,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  CirclePlus,
-  Filter,
-  Home,
-  RotateCcw,
-  UserRound,
-} from "lucide-react";
+import { CirclePlus, Home, UserRound } from "lucide-react";
 import {
   Navigate,
   Route,
@@ -48,54 +38,28 @@ import {
   DEFAULT_PROPOSAL_FORM,
   DEFAULT_TASK_FORM,
   MAX_AVATAR_FILE_SIZE,
-  MAX_TASK_DESCRIPTION_PREVIEW_CHARS,
-  SORT_OPTIONS,
-  STATUS_OPTIONS,
   TOKEN_KEY,
   type TabState,
 } from "../shared/config/constants";
 import { readFileAsDataUrl } from "../shared/lib/file";
+import { trimText } from "../shared/lib/format";
 import {
-  formatDate,
-  formatMoney,
-  formatRating,
-  trimText,
-} from "../shared/lib/format";
-import {
-  getExperienceLevelLabel,
   getExecutorProfileCheck,
   getPreferredTabByRole,
   isValidHttpUrl,
   toDelimitedList,
   toExecutorProfileForm,
-  toRoleLabel,
 } from "../shared/lib/profile";
 import {
   buildTasksQuery,
   fromInputDateTimeValue,
-  getStatusLabel,
   parseTagsInput,
-  shouldClampTaskDescription,
   toInputDateTimeValue,
   validateProposalForm,
   validateTaskForm,
 } from "../shared/lib/task";
-import {
-  getAcronym,
-  getDisplayAcronym,
-  getSafeState,
-} from "../shared/lib/telegram";
-import {
-  AppRoot,
-  Avatar,
-  Button,
-  Cell,
-  Input,
-  List,
-  Placeholder,
-  Section,
-  Textarea,
-} from "../shared/ui";
+import { getAcronym, getSafeState } from "../shared/lib/telegram";
+import { AppRoot, Placeholder, Section } from "../shared/ui";
 import {
   AccountAvatarScreen,
   AccountBotNotificationsScreen,
@@ -104,6 +68,11 @@ import {
   AccountNotificationsScreen,
   AccountRoleScreen,
 } from "../pages/account/ui/AccountScreens";
+import { CreateTaskPage } from "../pages/create-task/ui/CreateTaskPage";
+import { FeedPage } from "../pages/feed/ui/FeedPage";
+import { RoleOnboardingPage } from "../pages/onboarding/ui/RoleOnboardingPage";
+import { PublicProfilePage } from "../pages/public-profile/ui/PublicProfilePage";
+import { TaskDetailPage } from "../pages/task-detail/ui/TaskDetailPage";
 
 import "../App.css";
 function App() {
@@ -1426,51 +1395,15 @@ function App() {
   };
 
   const renderRoleOnboarding = (): JSX.Element => (
-    <Section
-      header="Стартовый режим"
-      footer="Это влияет на стартовый экран и акценты в интерфейсе. Ограничений по функциям нет."
-    >
-      <p className="inline-hint">
-        Выбери, как ты чаще используешь сервис. Роль можно поменять позже в
-        профиле.
-      </p>
-
-      <div className="role-choice-grid">
-        <button
-          className="role-choice-card"
-          type="button"
-          disabled={roleSavePending}
-          onClick={() => {
-            void handleSetPrimaryRole("CUSTOMER", {
-              navigateAfterSave: true,
-            });
-          }}
-        >
-          <span className="role-choice-title">Чаще заказчик</span>
-          <span className="role-choice-description">
-            Сразу попадаешь в создание задачи и быстрее публикуешь заказ.
-          </span>
-        </button>
-
-        <button
-          className="role-choice-card"
-          type="button"
-          disabled={roleSavePending}
-          onClick={() => {
-            void handleSetPrimaryRole("EXECUTOR", {
-              navigateAfterSave: true,
-            });
-          }}
-        >
-          <span className="role-choice-title">Чаще исполнитель</span>
-          <span className="role-choice-description">
-            Стартовая вкладка будет с лентой задач, чтобы быстрее откликаться.
-          </span>
-        </button>
-      </div>
-
-      {roleSaveError ? <p className="error-text">{roleSaveError}</p> : null}
-    </Section>
+    <RoleOnboardingPage
+      roleSavePending={roleSavePending}
+      roleSaveError={roleSaveError}
+      onChooseRole={(role) => {
+        void handleSetPrimaryRole(role, {
+          navigateAfterSave: true,
+        });
+      }}
+    />
   );
 
   const renderAccountHome = (): JSX.Element => {
@@ -1587,1146 +1520,163 @@ function App() {
     />
   );
 
-  const renderPublicProfile = (): JSX.Element => {
-    if (publicProfileLoading) {
-      return (
-        <Section>
-          <Placeholder
-            header="Загрузка"
-            description="Получаем публичный профиль..."
-          />
-        </Section>
-      );
-    }
-
-    if (publicProfileError) {
-      return (
-        <Section>
-          <Placeholder header="Ошибка" description={publicProfileError} />
-        </Section>
-      );
-    }
-
-    if (!publicProfileUser) {
-      return (
-        <Section>
-          <Placeholder
-            header="Профиль не найден"
-            description="Проверь ссылку или вернись к ленте."
-          />
-        </Section>
-      );
-    }
-
-    const publicProfile = publicProfileUser.profile;
-    const publicAcronym = getDisplayAcronym(publicProfileUser.displayName);
-
-    return (
-      <>
-        <Section
-          header="Публичный профиль"
-          footer="Эти данные видят другие пользователи при выборе исполнителя и работе по задаче."
-        >
-          <List>
-            <Cell
-              before={
-                <Avatar
-                  size={48}
-                  acronym={publicAcronym}
-                  imageUrl={publicProfile?.avatarUrl ?? null}
-                />
-              }
-              subtitle="Пользователь платформы"
-              description={`Приоритет: ${toRoleLabel(publicProfileUser.primaryRole)}`}
-            >
-              {publicProfileUser.displayName}
-            </Cell>
-            <Cell
-              subtitle="О себе"
-              description={publicProfile?.about ?? "Не заполнено"}
-            >
-              Описание
-            </Cell>
-            <Cell
-              subtitle="Навыки"
-              description={
-                publicProfile && publicProfile.skills.length > 0
-                  ? publicProfile.skills.join(", ")
-                  : "Не указаны"
-              }
-            >
-              Компетенции
-            </Cell>
-            <Cell
-              subtitle="Уровень"
-              after={getExperienceLevelLabel(
-                publicProfile?.experienceLevel ?? null,
-              )}
-            >
-              Опыт
-            </Cell>
-            <Cell
-              subtitle="Базовая ставка"
-              after={
-                publicProfile?.basePrice
-                  ? formatMoney(publicProfile.basePrice)
-                  : "Не указана"
-              }
-            >
-              Стоимость
-            </Cell>
-            <Cell
-              subtitle="Портфолио"
-              description={
-                publicProfile && publicProfile.portfolioLinks.length > 0
-                  ? publicProfile.portfolioLinks.slice(0, 3).join(" • ")
-                  : "Ссылки не добавлены"
-              }
-            >
-              Кейсы
-            </Cell>
-            <Cell subtitle="Рейтинг" after={String(publicProfile?.rating ?? 0)}>
-              Репутация
-            </Cell>
-            <Cell
-              subtitle="Завершено задач"
-              after={String(publicProfile?.completedTasksCount ?? 0)}
-            >
-              Статистика
-            </Cell>
-          </List>
-        </Section>
-
-        <Section>
-          <div className="row-actions row-actions-tight">
-            <Button mode="outline" onClick={() => navigate(-1)}>
-              Назад
-            </Button>
-            <Button mode="bezeled" onClick={() => navigate("/feed")}>
-              К ленте
-            </Button>
-          </div>
-        </Section>
-      </>
-    );
-  };
-
-  const renderTasksList = (): JSX.Element => {
-    const activeFiltersCount = [
-      filterApplied.q.trim(),
-      filterApplied.category.trim(),
-      filterApplied.budgetMin.trim(),
-      filterApplied.budgetMax.trim(),
-    ].filter((value) => value.length > 0).length;
-    const isCustomerPriority = authUser?.primaryRole === "CUSTOMER";
-
-    const filtersSummary =
-      activeFiltersCount > 0
-        ? `Фильтров активно: ${activeFiltersCount}`
-        : "Фильтры не заданы";
-
-    return (
-      <>
-        <Section
-          header="Лента задач"
-          footer="Фильтры свернуты по умолчанию, чтобы сначала видеть список задач."
-        >
-          <div className="feed-toolbar">
-            <Button
-              size="m"
-              mode={filtersOpen ? "filled" : "outline"}
-              onClick={() => setFiltersOpen((prev) => !prev)}
-            >
-              <span className="btn-with-icon">
-                <Filter size={16} />
-                <span>
-                  {filtersOpen ? "Скрыть фильтры" : "Показать фильтры"}
-                </span>
-              </span>
-            </Button>
-            <Button
-              size="m"
-              mode={isCustomerPriority ? "filled" : "bezeled"}
-              onClick={() => navigate("/create")}
-            >
-              <span className="btn-with-icon">
-                <CirclePlus size={16} />
-                <span>
-                  {isCustomerPriority ? "Создать задачу" : "Разместить задачу"}
-                </span>
-              </span>
-            </Button>
-          </div>
-
-          <p className="feed-inline-hint">{filtersSummary}</p>
-
-          {filtersOpen ? (
-            <>
-              <div className="form-grid">
-                <Input
-                  header="Поиск"
-                  placeholder="Например: лендинг"
-                  value={filterDraft.q}
-                  onChange={(event) =>
-                    setFilterDraft((prev) => ({
-                      ...prev,
-                      q: event.target.value,
-                    }))
-                  }
-                />
-                <Input
-                  header="Категория"
-                  placeholder="frontend"
-                  value={filterDraft.category}
-                  onChange={(event) =>
-                    setFilterDraft((prev) => ({
-                      ...prev,
-                      category: event.target.value,
-                    }))
-                  }
-                />
-                <Input
-                  header="Бюджет от"
-                  type="number"
-                  value={filterDraft.budgetMin}
-                  onChange={(event) =>
-                    setFilterDraft((prev) => ({
-                      ...prev,
-                      budgetMin: event.target.value,
-                    }))
-                  }
-                />
-                <Input
-                  header="Бюджет до"
-                  type="number"
-                  value={filterDraft.budgetMax}
-                  onChange={(event) =>
-                    setFilterDraft((prev) => ({
-                      ...prev,
-                      budgetMax: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-
-              <p className="form-label">Статус</p>
-              <div className="chip-row">
-                {STATUS_OPTIONS.map((statusOption) => (
-                  <Button
-                    key={statusOption.value}
-                    size="s"
-                    mode={
-                      filterDraft.status === statusOption.value
-                        ? "filled"
-                        : "outline"
-                    }
-                    onClick={() =>
-                      setFilterDraft((prev) => ({
-                        ...prev,
-                        status: statusOption.value,
-                      }))
-                    }
-                  >
-                    {statusOption.label}
-                  </Button>
-                ))}
-              </div>
-
-              <p className="form-label">Сортировка</p>
-              <div className="chip-row">
-                {SORT_OPTIONS.map((sortOption) => (
-                  <Button
-                    key={sortOption.value}
-                    size="s"
-                    mode={
-                      filterDraft.sort === sortOption.value
-                        ? "filled"
-                        : "outline"
-                    }
-                    onClick={() =>
-                      setFilterDraft((prev) => ({
-                        ...prev,
-                        sort: sortOption.value,
-                      }))
-                    }
-                  >
-                    {sortOption.label}
-                  </Button>
-                ))}
-              </div>
-
-              <div className="row-actions row-actions-tight">
-                <Button size="m" mode="filled" onClick={handleApplyFilters}>
-                  <span className="btn-with-icon">
-                    <Check size={16} />
-                    <span>Применить</span>
-                  </span>
-                </Button>
-                <Button size="m" mode="outline" onClick={handleResetFilters}>
-                  <span className="btn-with-icon">
-                    <RotateCcw size={16} />
-                    <span>Сбросить</span>
-                  </span>
-                </Button>
-              </div>
-            </>
-          ) : null}
-        </Section>
-
-        <Section
-          header={`Задачи (${pagination.total})`}
-          footer={`Страница ${pagination.page}/${Math.max(pagination.totalPages, 1)}`}
-        >
-          {listLoading ? (
-            <Placeholder
-              header="Загрузка"
-              description="Получаем список задач..."
-            />
-          ) : listError ? (
-            <Placeholder header="Ошибка" description={listError} />
-          ) : tasks.length === 0 ? (
-            <Placeholder
-              header="Пока пусто"
-              description="По текущим фильтрам задач не найдено"
-            />
-          ) : (
-            <div className="task-feed-list">
-              {tasks.map((task) => {
-                const isExpanded = Boolean(expandedFeedDescriptions[task.id]);
-                const canClamp = shouldClampTaskDescription(task.description);
-                const previewDescription =
-                  canClamp && !isExpanded
-                    ? trimText(
-                        task.description,
-                        MAX_TASK_DESCRIPTION_PREVIEW_CHARS,
-                      )
-                    : task.description;
-
-                return (
-                  <article key={task.id} className="task-feed-card">
-                    <div className="task-feed-card-head">
-                      <h3 className="task-feed-card-title">{task.title}</h3>
-                      <p className="task-feed-card-budget">
-                        {formatMoney(task.budget)}
-                      </p>
-                    </div>
-
-                    <div className="task-feed-meta-row">
-                      <span className="task-feed-meta-chip">
-                        {getStatusLabel(task.status)}
-                      </span>
-                      <span className="task-feed-meta-chip">
-                        {formatDate(task.deadlineAt)}
-                      </span>
-                    </div>
-
-                    <div className="task-feed-meta-row">
-                      <span className="task-feed-meta-chip">
-                        {task.category}
-                      </span>
-                      {task.tags.slice(0, 3).map((tag) => (
-                        <span
-                          key={`${task.id}-${tag}`}
-                          className="task-feed-meta-chip"
-                        >
-                          #{tag}
-                        </span>
-                      ))}
-                    </div>
-
-                    <p className="task-feed-description">
-                      {previewDescription}
-                    </p>
-
-                    {canClamp ? (
-                      <div className="task-feed-readmore-row">
-                        <Button
-                          mode="outline"
-                          size="s"
-                          onClick={() => toggleFeedDescription(task.id)}
-                        >
-                          {isExpanded ? "Скрыть" : "Показать еще"}
-                        </Button>
-                      </div>
-                    ) : null}
-
-                    <div className="task-feed-actions">
-                      <Button
-                        mode="bezeled"
-                        size="m"
-                        onClick={() => openTaskDetail(task.id)}
-                      >
-                        Открыть задачу
-                      </Button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="row-actions row-actions-tight">
-            <Button
-              mode="outline"
-              size="m"
-              disabled={page <= 1 || listLoading}
-              onClick={() => setPage((prev) => prev - 1)}
-            >
-              <span className="btn-with-icon">
-                <ChevronLeft size={16} />
-                <span>Назад</span>
-              </span>
-            </Button>
-            <Button
-              mode="outline"
-              size="m"
-              disabled={
-                listLoading ||
-                page >= pagination.totalPages ||
-                pagination.totalPages === 0
-              }
-              onClick={() => setPage((prev) => prev + 1)}
-            >
-              <span className="btn-with-icon">
-                <span>Вперед</span>
-                <ChevronRight size={16} />
-              </span>
-            </Button>
-          </div>
-        </Section>
-      </>
-    );
-  };
-
-  const renderCreateTask = (): JSX.Element => (
-    <Section
-      header="Новая задача"
-      footer="После публикации откроется карточка задачи, где можно отредактировать детали."
-    >
-      <div className="form-grid">
-        <Input
-          header="Заголовок"
-          placeholder="Сделать лендинг"
-          value={createForm.title}
-          onChange={(event) =>
-            setCreateForm((prev) => ({ ...prev, title: event.target.value }))
-          }
-        />
-        <Textarea
-          header="Описание"
-          placeholder="Что нужно сделать"
-          value={createForm.description}
-          onChange={(event) =>
-            setCreateForm((prev) => ({
-              ...prev,
-              description: event.target.value,
-            }))
-          }
-        />
-        <Input
-          header="Бюджет"
-          type="number"
-          placeholder="15000"
-          value={createForm.budget}
-          onChange={(event) =>
-            setCreateForm((prev) => ({ ...prev, budget: event.target.value }))
-          }
-        />
-        <Input
-          header="Категория"
-          placeholder="frontend"
-          value={createForm.category}
-          onChange={(event) =>
-            setCreateForm((prev) => ({ ...prev, category: event.target.value }))
-          }
-        />
-        <Input
-          header="Дедлайн"
-          type="datetime-local"
-          value={createForm.deadlineAt}
-          onChange={(event) =>
-            setCreateForm((prev) => ({
-              ...prev,
-              deadlineAt: event.target.value,
-            }))
-          }
-        />
-        <Input
-          header="Теги"
-          placeholder="react, vite, telegram"
-          value={createForm.tags}
-          onChange={(event) =>
-            setCreateForm((prev) => ({ ...prev, tags: event.target.value }))
-          }
-        />
-      </div>
-
-      {createError ? <p className="error-text">{createError}</p> : null}
-
-      <div className="row-actions">
-        <Button
-          mode="filled"
-          size="l"
-          disabled={createPending}
-          onClick={() => {
-            void handleCreateTask();
-          }}
-        >
-          <span className="btn-with-icon">
-            <CirclePlus size={16} />
-            <span>
-              {createPending ? "Публикуем..." : "Опубликовать задачу"}
-            </span>
-          </span>
-        </Button>
-        <Button mode="outline" size="l" onClick={() => navigate("/feed")}>
-          <span className="btn-with-icon">
-            <ArrowLeft size={16} />
-            <span>Назад к ленте</span>
-          </span>
-        </Button>
-      </div>
-    </Section>
+  const renderPublicProfile = (): JSX.Element => (
+    <PublicProfilePage
+      publicProfileUser={publicProfileUser}
+      publicProfileLoading={publicProfileLoading}
+      publicProfileError={publicProfileError}
+      onBack={() => navigate(-1)}
+      onToFeed={() => navigate("/feed")}
+    />
   );
 
-  const renderProposalsBlock = (): JSX.Element => {
-    if (!detailTask || !authUser) {
-      return <></>;
-    }
+  const renderTasksList = (): JSX.Element => (
+    <FeedPage
+      authPrimaryRole={authUser?.primaryRole ?? null}
+      filterDraft={filterDraft}
+      filterApplied={filterApplied}
+      filtersOpen={filtersOpen}
+      onToggleFilters={() => setFiltersOpen((prev) => !prev)}
+      onPatchFilterDraft={(patch) =>
+        setFilterDraft((prev) => ({
+          ...prev,
+          ...patch,
+        }))
+      }
+      onApplyFilters={handleApplyFilters}
+      onResetFilters={handleResetFilters}
+      tasks={tasks}
+      listLoading={listLoading}
+      listError={listError}
+      expandedFeedDescriptions={expandedFeedDescriptions}
+      onToggleDescription={toggleFeedDescription}
+      onOpenTask={openTaskDetail}
+      onOpenCreate={() => navigate("/create")}
+      page={page}
+      pagination={{
+        page: pagination.page,
+        total: pagination.total,
+        totalPages: pagination.totalPages,
+      }}
+      onPrevPage={() => setPage((prev) => prev - 1)}
+      onNextPage={() => setPage((prev) => prev + 1)}
+    />
+  );
 
-    const canManageOwnProposal =
-      detailTask.customerId !== authUser.id && detailTask.status === "OPEN";
-    const canSelectExecutor =
-      detailTask.customerId === authUser.id && detailTask.status === "OPEN";
-    const canCreateProposal = executorProfileCheck.isComplete;
+  const renderCreateTask = (): JSX.Element => (
+    <CreateTaskPage
+      form={createForm}
+      pending={createPending}
+      error={createError}
+      onPatchForm={(patch) =>
+        setCreateForm((prev) => ({
+          ...prev,
+          ...patch,
+        }))
+      }
+      onSubmit={() => {
+        void handleCreateTask();
+      }}
+      onBackToFeed={() => navigate("/feed")}
+    />
+  );
 
-    return (
-      <Section
-        header={isDetailOwner ? `Отклики (${proposals.length})` : "Мой отклик"}
-        footer={
-          isDetailOwner
-            ? "Выбери одного исполнителя. После выбора задача перейдет в статус «В работе»."
-            : "Отклик можно изменить или удалить, пока заказчик не выбрал исполнителя."
+  const renderDetailTask = (): JSX.Element => (
+    <TaskDetailPage
+      detailLoading={detailLoading}
+      detailError={detailError}
+      detailTask={detailTask}
+      authUser={authUser}
+      isDetailOwner={isDetailOwner}
+      expandedDetailDescription={expandedDetailDescription}
+      onToggleExpandedDetailDescription={() =>
+        setExpandedDetailDescription((prev) => !prev)
+      }
+      editMode={editMode}
+      editPending={editPending}
+      editError={editError}
+      editForm={editForm}
+      onPatchEditForm={(patch: Partial<TaskForm>) =>
+        setEditForm((prev) => ({
+          ...prev,
+          ...patch,
+        }))
+      }
+      onToggleEditMode={() => setEditMode((prev) => !prev)}
+      onSaveTaskEdits={() => {
+        void handleSaveTaskEdits();
+      }}
+      onCancelTask={() => {
+        void handleCancelTask();
+      }}
+      statusHistory={statusHistory}
+      statusHistoryLoading={statusHistoryLoading}
+      statusHistoryError={statusHistoryError}
+      statusActionPending={statusActionPending}
+      statusActionError={statusActionError}
+      rejectReviewMode={rejectReviewMode}
+      rejectReviewComment={rejectReviewComment}
+      onToggleRejectReviewMode={() => {
+        setStatusActionError(null);
+        setRejectReviewMode((prev) => !prev);
+      }}
+      onRejectReviewCommentChange={setRejectReviewComment}
+      onSendToReview={() => {
+        void handleSendToReview();
+      }}
+      onApproveTask={() => {
+        void handleApproveTask();
+      }}
+      onRejectReview={() => {
+        void handleRejectReview();
+      }}
+      proposals={proposals}
+      proposalsLoading={proposalsLoading}
+      proposalsError={proposalsError}
+      ownProposal={ownProposal}
+      proposalEditMode={proposalEditMode}
+      proposalPending={proposalPending}
+      proposalError={proposalError}
+      proposalForm={proposalForm}
+      selectPendingId={selectPendingId}
+      executorProfileCheck={executorProfileCheck}
+      onOpenUserProfile={openUserProfile}
+      onToFeed={() => navigate("/feed")}
+      onSelectProposal={(proposalId: string) => {
+        void handleSelectProposal(proposalId);
+      }}
+      onStartEditOwnProposal={() => {
+        if (!ownProposal) {
+          return;
         }
-      >
-        {proposalsLoading ? (
-          <Placeholder header="Загрузка" description="Получаем отклики..." />
-        ) : proposalsError ? (
-          <Placeholder header="Ошибка" description={proposalsError} />
-        ) : isDetailOwner ? (
-          proposals.length === 0 ? (
-            <Placeholder
-              header="Откликов нет"
-              description="Исполнители еще не откликнулись на задачу"
-            />
-          ) : (
-            <div className="proposal-list">
-              {proposals.map((proposal) => {
-                const executorId = proposal.executor?.id ?? null;
-                const executorProfile = proposal.executor?.profile ?? null;
-                const executorAcronym = getDisplayAcronym(
-                  proposal.executor?.displayName ?? "Исполнитель",
-                );
-                const skillPreview =
-                  executorProfile && executorProfile.skills.length > 0
-                    ? executorProfile.skills.slice(0, 5)
-                    : [];
-                const portfolioPreview =
-                  executorProfile?.portfolioLinks?.[0] ?? null;
 
-                return (
-                  <div key={proposal.id} className="proposal-card">
-                    <div className="proposal-head">
-                      <Avatar
-                        size={36}
-                        acronym={executorAcronym}
-                        imageUrl={executorProfile?.avatarUrl ?? null}
-                      />
-                      <div className="proposal-head-main">
-                        <p className="proposal-title">
-                          {proposal.executor?.displayName ?? "Исполнитель"}
-                        </p>
-                        <p className="proposal-mini-meta">
-                          Рейтинг: {formatRating(executorProfile?.rating ?? 0)}{" "}
-                          • Опыт:{" "}
-                          {getExperienceLevelLabel(
-                            executorProfile?.experienceLevel ?? null,
-                          )}{" "}
-                          • Завершено:{" "}
-                          {String(executorProfile?.completedTasksCount ?? 0)}
-                        </p>
-                        <p className="proposal-mini-meta">
-                          База:{" "}
-                          {executorProfile?.basePrice
-                            ? formatMoney(executorProfile.basePrice)
-                            : "не указана"}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="proposal-meta">
-                      {formatMoney(proposal.price)} • {proposal.etaDays} дн.
-                    </p>
-                    {skillPreview.length > 0 ? (
-                      <div className="proposal-skill-row">
-                        {skillPreview.map((skill) => (
-                          <span
-                            key={`${proposal.id}-${skill}`}
-                            className="proposal-skill-chip"
-                          >
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    ) : null}
-                    {executorProfile?.about ? (
-                      <p className="proposal-mini-about">
-                        {trimText(executorProfile.about, 110)}
-                      </p>
-                    ) : null}
-                    {portfolioPreview ? (
-                      <p className="proposal-mini-portfolio">
-                        Портфолио: {trimText(portfolioPreview, 78)}
-                      </p>
-                    ) : null}
-                    <p className="proposal-comment">{proposal.comment}</p>
-                    <div className="proposal-actions">
-                      {executorId ? (
-                        <Button
-                          mode="outline"
-                          size="s"
-                          onClick={() => {
-                            openUserProfile(executorId);
-                          }}
-                        >
-                          Профиль
-                        </Button>
-                      ) : null}
-                      <Button
-                        mode="filled"
-                        size="s"
-                        disabled={
-                          !canSelectExecutor || selectPendingId === proposal.id
-                        }
-                        onClick={() => {
-                          void handleSelectProposal(proposal.id);
-                        }}
-                      >
-                        {selectPendingId === proposal.id
-                          ? "Выбираем..."
-                          : "Выбрать"}
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )
-        ) : ownProposal ? (
-          <>
-            <div className="proposal-card">
-              <p className="proposal-title">{formatMoney(ownProposal.price)}</p>
-              <p className="proposal-meta">Срок: {ownProposal.etaDays} дн.</p>
-              <p className="proposal-comment">{ownProposal.comment}</p>
-            </div>
-
-            {canManageOwnProposal ? (
-              <div className="row-actions">
-                <Button
-                  mode="bezeled"
-                  size="m"
-                  onClick={() => {
-                    setProposalError(null);
-                    setProposalEditMode((prev) => !prev);
-                    setProposalForm({
-                      price: String(ownProposal.price),
-                      comment: ownProposal.comment,
-                      etaDays: String(ownProposal.etaDays),
-                    });
-                  }}
-                >
-                  {proposalEditMode ? "Скрыть форму" : "Изменить"}
-                </Button>
-                <Button
-                  mode="plain"
-                  size="m"
-                  disabled={proposalPending}
-                  onClick={() => {
-                    void handleDeleteProposal();
-                  }}
-                >
-                  Удалить
-                </Button>
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <Placeholder
-            header="Отклик не отправлен"
-            description={
-              canCreateProposal
-                ? "Оставь цену и сроки, чтобы заказчик мог выбрать тебя"
-                : "Перед откликом нужно заполнить профиль исполнителя."
-            }
-          />
-        )}
-
-        {!isDetailOwner &&
-        canManageOwnProposal &&
-        !canCreateProposal &&
-        !ownProposal ? (
-          <div className="proposal-profile-gate">
-            <p className="proposal-profile-gate-title">
-              Чтобы откликаться, заполни профиль исполнителя:
-            </p>
-            <div className="profile-check-list">
-              {executorProfileCheck.missing.map((item) => (
-                <p key={item} className="profile-check-item">
-                  • {item}
-                </p>
-              ))}
-            </div>
-            <div className="row-actions row-actions-tight">
-              <Button
-                mode="filled"
-                size="m"
-                onClick={() => navigate("/account/executor")}
-              >
-                Заполнить профиль
-              </Button>
-            </div>
-          </div>
-        ) : null}
-
-        {!isDetailOwner &&
-        canManageOwnProposal &&
-        canCreateProposal &&
-        (!ownProposal || proposalEditMode) ? (
-          <div className="form-grid proposal-form">
-            <Input
-              header="Цена"
-              type="number"
-              value={proposalForm.price}
-              onChange={(event) =>
-                setProposalForm((prev) => ({
-                  ...prev,
-                  price: event.target.value,
-                }))
-              }
-            />
-            <Input
-              header="Срок (дней)"
-              type="number"
-              value={proposalForm.etaDays}
-              onChange={(event) =>
-                setProposalForm((prev) => ({
-                  ...prev,
-                  etaDays: event.target.value,
-                }))
-              }
-            />
-            <Textarea
-              header="Комментарий"
-              value={proposalForm.comment}
-              onChange={(event) =>
-                setProposalForm((prev) => ({
-                  ...prev,
-                  comment: event.target.value,
-                }))
-              }
-            />
-
-            {proposalError ? (
-              <p className="error-text">{proposalError}</p>
-            ) : null}
-
-            <div className="row-actions">
-              <Button
-                mode="filled"
-                size="m"
-                disabled={proposalPending}
-                onClick={() => {
-                  if (ownProposal) {
-                    void handleUpdateProposal();
-                  } else {
-                    void handleCreateProposal();
-                  }
-                }}
-              >
-                {proposalPending
-                  ? "Сохраняем..."
-                  : ownProposal
-                    ? "Сохранить отклик"
-                    : "Отправить отклик"}
-              </Button>
-              {ownProposal ? (
-                <Button
-                  mode="outline"
-                  size="m"
-                  onClick={() => setProposalEditMode(false)}
-                >
-                  Отмена
-                </Button>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-      </Section>
-    );
-  };
-
-  const renderDetailTask = (): JSX.Element => {
-    if (detailLoading) {
-      return (
-        <Section>
-          <Placeholder
-            header="Загрузка"
-            description="Получаем карточку задачи..."
-          />
-        </Section>
-      );
-    }
-
-    if (detailError) {
-      return (
-        <Section>
-          <Placeholder header="Ошибка" description={detailError} />
-        </Section>
-      );
-    }
-
-    if (!detailTask) {
-      return (
-        <Section>
-          <Placeholder header="Пусто" description="Задача не найдена" />
-        </Section>
-      );
-    }
-
-    const canEdit = isDetailOwner && detailTask.status === "OPEN";
-    const isAssignedExecutor = Boolean(
-      authUser &&
-      detailTask.assignment &&
-      detailTask.assignment.executorId === authUser.id,
-    );
-    const canSendToReview =
-      isAssignedExecutor && detailTask.status === "IN_PROGRESS";
-    const canApproveOrReject =
-      isDetailOwner && detailTask.status === "ON_REVIEW";
-    const detailCustomer = detailTask.customer;
-    const canClampDetailDescription = shouldClampTaskDescription(
-      detailTask.description,
-    );
-
-    return (
-      <>
-        <Section
-          header="Карточка задачи"
-          footer={`Создано: ${formatDate(detailTask.createdAt)} • Дедлайн: ${formatDate(
-            detailTask.deadlineAt,
-          )}`}
-        >
-          <div className="task-detail-head">
-            <h2 className="task-detail-title">{detailTask.title}</h2>
-            <p className="task-detail-budget">
-              {formatMoney(detailTask.budget)}
-            </p>
-          </div>
-
-          <div className="task-detail-meta-row">
-            <span className="task-feed-meta-chip">
-              {getStatusLabel(detailTask.status)}
-            </span>
-            <span className="task-feed-meta-chip">
-              {formatDate(detailTask.deadlineAt)}
-            </span>
-            <span className="task-feed-meta-chip">{detailTask.category}</span>
-          </div>
-
-          {detailTask.tags.length > 0 ? (
-            <div className="task-detail-meta-row">
-              {detailTask.tags.map((tag) => (
-                <span
-                  key={`${detailTask.id}-${tag}`}
-                  className="task-feed-meta-chip"
-                >
-                  #{tag}
-                </span>
-              ))}
-            </div>
-          ) : null}
-
-          {detailCustomer ? (
-            <div className="task-detail-customer-row">
-              <p className="task-detail-customer-text">
-                Заказчик: {detailCustomer.displayName}
-              </p>
-              <Button
-                mode="outline"
-                size="s"
-                onClick={() => openUserProfile(detailCustomer.id)}
-              >
-                Профиль заказчика
-              </Button>
-            </div>
-          ) : (
-            <p className="task-detail-customer-text">Заказчик недоступен</p>
-          )}
-        </Section>
-
-        <Section header="Описание">
-          <p
-            className={`task-detail-description ${canClampDetailDescription && !expandedDetailDescription ? "task-detail-description-clamped" : ""}`}
-          >
-            {detailTask.description}
-          </p>
-          {canClampDetailDescription ? (
-            <div className="task-feed-readmore-row">
-              <Button
-                mode="outline"
-                size="s"
-                onClick={() => setExpandedDetailDescription((prev) => !prev)}
-              >
-                {expandedDetailDescription ? "Скрыть" : "Показать еще"}
-              </Button>
-            </div>
-          ) : null}
-        </Section>
-
-        <Section header="Действия">
-          <div className="row-actions row-actions-tight">
-            <Button mode="outline" onClick={() => navigate("/feed")}>
-              <span className="btn-with-icon">
-                <Home size={16} />
-                <span>К ленте</span>
-              </span>
-            </Button>
-            {canEdit ? (
-              <Button
-                mode="bezeled"
-                onClick={() => setEditMode((prev) => !prev)}
-              >
-                {editMode ? "Скрыть редактирование" : "Редактировать"}
-              </Button>
-            ) : null}
-            {canEdit ? (
-              <Button mode="plain" onClick={() => void handleCancelTask()}>
-                Отменить задачу
-              </Button>
-            ) : null}
-          </div>
-        </Section>
-
-        {canSendToReview || canApproveOrReject || rejectReviewMode ? (
-          <Section
-            header="Действия по статусу"
-            footer="Статус задачи меняют только участники, которым это разрешено по роли."
-          >
-            {canSendToReview ? (
-              <Button
-                mode="filled"
-                size="m"
-                disabled={statusActionPending}
-                onClick={() => {
-                  void handleSendToReview();
-                }}
-              >
-                {statusActionPending
-                  ? "Отправляем..."
-                  : "Отправить на проверку"}
-              </Button>
-            ) : null}
-
-            {canApproveOrReject ? (
-              <>
-                <div className="row-actions">
-                  <Button
-                    mode="filled"
-                    size="m"
-                    disabled={statusActionPending}
-                    onClick={() => {
-                      void handleApproveTask();
-                    }}
-                  >
-                    {statusActionPending
-                      ? "Подтверждаем..."
-                      : "Подтвердить выполнение"}
-                  </Button>
-                  <Button
-                    mode="bezeled"
-                    size="m"
-                    disabled={statusActionPending}
-                    onClick={() => {
-                      setStatusActionError(null);
-                      setRejectReviewMode((prev) => !prev);
-                    }}
-                  >
-                    {rejectReviewMode ? "Скрыть форму" : "Вернуть в работу"}
-                  </Button>
-                </div>
-
-                {rejectReviewMode ? (
-                  <div className="form-grid">
-                    <Textarea
-                      header="Комментарий для исполнителя"
-                      placeholder="Например: нужно поправить мобильную верстку и форму отправки."
-                      value={rejectReviewComment}
-                      onChange={(event) => {
-                        setRejectReviewComment(event.target.value);
-                      }}
-                    />
-                    <div className="row-actions row-actions-tight">
-                      <Button
-                        mode="outline"
-                        size="m"
-                        disabled={statusActionPending}
-                        onClick={() => {
-                          void handleRejectReview();
-                        }}
-                      >
-                        {statusActionPending
-                          ? "Возвращаем..."
-                          : "Подтвердить возврат в работу"}
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-
-            {statusActionError ? (
-              <p className="error-text">{statusActionError}</p>
-            ) : null}
-          </Section>
-        ) : null}
-
-        <Section
-          header="История статусов"
-          footer="Последние изменения показываются сверху."
-        >
-          {statusHistoryLoading ? (
-            <Placeholder header="Загрузка" description="Получаем историю..." />
-          ) : statusHistoryError ? (
-            <Placeholder header="Ошибка" description={statusHistoryError} />
-          ) : statusHistory.length === 0 ? (
-            <Placeholder
-              header="История пуста"
-              description="Переходы статуса появятся после действий по задаче."
-            />
-          ) : (
-            <div className="status-history-list">
-              {statusHistory.map((entry) => {
-                const actorLabel = entry.changedByUser.displayName;
-
-                return (
-                  <div key={entry.id} className="status-history-card">
-                    <p className="status-history-line">
-                      {entry.fromStatus
-                        ? `${getStatusLabel(entry.fromStatus)} -> ${getStatusLabel(entry.toStatus)}`
-                        : `Создана -> ${getStatusLabel(entry.toStatus)}`}
-                    </p>
-                    <p className="status-history-meta">
-                      {formatDate(entry.createdAt)} • {actorLabel}
-                    </p>
-                    {entry.comment ? (
-                      <p className="status-history-comment">{entry.comment}</p>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </Section>
-
-        {editMode ? (
-          <Section
-            header="Редактирование"
-            footer="Изменять можно только задачи в статусе «Открыта»."
-          >
-            <div className="form-grid">
-              <Input
-                header="Заголовок"
-                value={editForm.title}
-                onChange={(event) =>
-                  setEditForm((prev) => ({
-                    ...prev,
-                    title: event.target.value,
-                  }))
-                }
-              />
-              <Textarea
-                header="Описание"
-                value={editForm.description}
-                onChange={(event) =>
-                  setEditForm((prev) => ({
-                    ...prev,
-                    description: event.target.value,
-                  }))
-                }
-              />
-              <Input
-                header="Бюджет"
-                type="number"
-                value={editForm.budget}
-                onChange={(event) =>
-                  setEditForm((prev) => ({
-                    ...prev,
-                    budget: event.target.value,
-                  }))
-                }
-              />
-              <Input
-                header="Категория"
-                value={editForm.category}
-                onChange={(event) =>
-                  setEditForm((prev) => ({
-                    ...prev,
-                    category: event.target.value,
-                  }))
-                }
-              />
-              <Input
-                header="Дедлайн"
-                type="datetime-local"
-                value={editForm.deadlineAt}
-                onChange={(event) =>
-                  setEditForm((prev) => ({
-                    ...prev,
-                    deadlineAt: event.target.value,
-                  }))
-                }
-              />
-              <Input
-                header="Теги"
-                value={editForm.tags}
-                onChange={(event) =>
-                  setEditForm((prev) => ({ ...prev, tags: event.target.value }))
-                }
-              />
-            </div>
-
-            {editError ? <p className="error-text">{editError}</p> : null}
-
-            <div className="row-actions">
-              <Button
-                mode="filled"
-                disabled={editPending}
-                onClick={() => {
-                  void handleSaveTaskEdits();
-                }}
-              >
-                {editPending ? "Сохраняем..." : "Сохранить"}
-              </Button>
-              <Button mode="outline" onClick={() => setEditMode(false)}>
-                Отмена
-              </Button>
-            </div>
-          </Section>
-        ) : null}
-
-        {renderProposalsBlock()}
-      </>
-    );
-  };
+        setProposalError(null);
+        setProposalEditMode((prev) => !prev);
+        setProposalForm({
+          price: String(ownProposal.price),
+          comment: ownProposal.comment,
+          etaDays: String(ownProposal.etaDays),
+        });
+      }}
+      onDeleteOwnProposal={() => {
+        void handleDeleteProposal();
+      }}
+      onPatchProposalForm={(patch: Partial<ProposalForm>) =>
+        setProposalForm((prev) => ({
+          ...prev,
+          ...patch,
+        }))
+      }
+      onCreateProposal={() => {
+        void handleCreateProposal();
+      }}
+      onUpdateProposal={() => {
+        void handleUpdateProposal();
+      }}
+      onCancelProposalEdit={() => setProposalEditMode(false)}
+      onOpenExecutorProfileSetup={() => navigate("/account/executor")}
+    />
+  );
 
   const renderAuthGate = (): JSX.Element | null => {
     if (authLoading) {
