@@ -1,0 +1,35 @@
+:root {
+  --bg-0: #f8fbfa;
+  --bg-1: #e8f1ee;
+  --bg-2: #d7ebe4;
+  --text-main: #102425;
+  --text-soft: #355154;
+  --muted: #5b777a;
+  --line: #c6d9d4;
+  --card-bg: #ffffff;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  line-height: 1.45;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: var(--text-main);
+  background:
+    radial-gradient(1200px 600px at 90% -10%, #95d4bb 0%, rgba(149, 212, 187, 0) 60%),
+    linear-gradient(160deg, var(--bg-0) 0%, var(--bg-1) 45%, var(--bg-2) 100%);
+}
+
+#root {
+  min-height: 100vh;
+}
