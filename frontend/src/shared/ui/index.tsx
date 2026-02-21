@@ -9,12 +9,22 @@ type UiButtonMode = "filled" | "outline" | "bezeled" | "plain";
 type UiButtonSize = "s" | "m" | "l";
 
 export const AppRoot = ({
+  appearance = "light",
+  platform = "base",
   children,
 }: {
   appearance?: "light" | "dark";
   platform?: "ios" | "base";
   children: ReactNode;
-}): JSX.Element => <div className="ui-root">{children}</div>;
+}): JSX.Element => (
+  <div
+    className={`ui-root ui-root-${appearance} ui-root-platform-${platform}`}
+    data-appearance={appearance}
+    data-platform={platform}
+  >
+    {children}
+  </div>
+);
 
 export const Avatar = ({
   size,

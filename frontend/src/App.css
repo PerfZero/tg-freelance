@@ -1,7 +1,27 @@
 .ui-root {
+    --app-bg: var(--tg-theme-bg-color, #ffffff);
+    --app-section-bg: var(--tg-theme-section-bg-color, #ffffff);
+    --app-card-bg: var(--tg-theme-bg-color, #ffffff);
+    --app-border: var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.12));
+    --app-text: var(--tg-theme-text-color, #11181c);
+    --app-hint: var(--tg-theme-hint-color, #788898);
     min-height: 100vh;
-    color: var(--tg-theme-text-color, #11181c);
+    color: var(--app-text);
     -webkit-tap-highlight-color: transparent;
+}
+
+.ui-root-dark {
+    --app-bg: #0c0f14;
+    --app-section-bg: #171b22;
+    --app-card-bg: #12161c;
+    --app-border: rgba(255, 255, 255, 0.12);
+    --app-text: #f2f5f8;
+    --app-hint: #9aa4b4;
+    color-scheme: dark;
+}
+
+.ui-root-light {
+    color-scheme: light;
 }
 
 .app-shell {
@@ -25,15 +45,14 @@
 
 .ui-section {
     border-radius: 14px;
-    border: 1px solid
-        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.12));
-    background: var(--tg-theme-section-bg-color, #ffffff);
+    border: 1px solid var(--app-border);
+    background: var(--app-section-bg);
     overflow: hidden;
 }
 
 .ui-section-header {
     padding: 12px 14px 4px;
-    color: var(--tg-theme-section-header-text-color, #6f7f8c);
+    color: var(--app-hint);
     font-size: 14px;
     font-weight: 600;
 }
@@ -47,7 +66,7 @@
 
 .ui-section-footer {
     padding: 0 14px 12px;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     font-size: 13px;
     line-height: 1.35;
 }
@@ -118,8 +137,8 @@
 
 .ui-btn-outline {
     background: transparent;
-    color: var(--tg-theme-text-color, #11181c);
-    border-color: var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.16));
+    color: var(--app-text);
+    border-color: var(--app-border);
 }
 
 .ui-btn-bezeled {
@@ -151,10 +170,9 @@
 }
 
 .ui-cell {
-    border: 1px solid
-        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.08));
+    border: 1px solid var(--app-border);
     border-radius: 12px;
-    background: var(--tg-theme-bg-color, #ffffff);
+    background: var(--app-card-bg);
     display: flex;
     align-items: flex-start;
     gap: 10px;
@@ -191,14 +209,14 @@
 .ui-cell-subtitle {
     margin-top: 2px;
     font-size: 13px;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     line-height: 1.3;
 }
 
 .ui-cell-description {
     margin-top: 4px;
     font-size: 13px;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     line-height: 1.35;
 }
 
@@ -210,7 +228,7 @@
     text-align: right;
     flex-shrink: 0;
     font-size: 14px;
-    color: var(--tg-theme-text-color, #11181c);
+    color: var(--app-text);
     white-space: normal;
 }
 
@@ -221,17 +239,16 @@
 
 .ui-field-label {
     font-size: 13px;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
 }
 
 .ui-input {
     width: 100%;
     box-sizing: border-box;
     border-radius: 12px;
-    border: 1px solid
-        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.16));
-    background: var(--tg-theme-bg-color, #ffffff);
-    color: var(--tg-theme-text-color, #11181c);
+    border: 1px solid var(--app-border);
+    background: var(--app-card-bg);
+    color: var(--app-text);
     padding: 10px 12px;
     min-height: 42px;
     outline: none;
@@ -248,8 +265,7 @@
 }
 
 .ui-placeholder {
-    border: 1px dashed
-        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.2));
+    border: 1px dashed var(--app-border);
     border-radius: 12px;
     padding: 18px 14px;
     text-align: center;
@@ -263,7 +279,7 @@
 
 .ui-placeholder-description {
     margin: 8px 0 0;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     font-size: 14px;
     line-height: 1.35;
 }
@@ -282,7 +298,7 @@
 
 .app-subtitle {
     margin: 3px 0 0;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     font-size: 13px;
 }
 
@@ -304,7 +320,7 @@
 
 .form-label {
     margin: 4px 0 0;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     font-size: 13px;
 }
 
@@ -319,7 +335,7 @@
 
 .feed-inline-hint {
     margin: 0;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     font-size: 13px;
 }
 
@@ -329,10 +345,9 @@
 }
 
 .task-feed-card {
-    border: 1px solid
-        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.12));
+    border: 1px solid var(--app-border);
     border-radius: 12px;
-    background: var(--tg-theme-bg-color, #ffffff);
+    background: var(--app-card-bg);
     padding: 11px;
     display: flex;
     flex-direction: column;
@@ -374,11 +389,10 @@
     display: inline-flex;
     align-items: center;
     border-radius: 999px;
-    border: 1px solid
-        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.16));
+    border: 1px solid var(--app-border);
     padding: 4px 9px;
     font-size: 12px;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     background: color-mix(
         in srgb,
         var(--tg-theme-link-color, #248dff) 6%,
@@ -390,7 +404,7 @@
     margin: 0;
     font-size: 14px;
     line-height: 1.4;
-    color: var(--tg-theme-text-color, #11181c);
+    color: var(--app-text);
     white-space: pre-wrap;
 }
 
@@ -442,7 +456,7 @@
 
 .task-detail-customer-text {
     margin: 0;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     font-size: 13px;
 }
 
@@ -450,7 +464,7 @@
     margin: 0;
     font-size: 14px;
     line-height: 1.45;
-    color: var(--tg-theme-text-color, #11181c);
+    color: var(--app-text);
     white-space: pre-wrap;
 }
 
@@ -489,10 +503,9 @@
 
 .role-choice-card {
     width: 100%;
-    border: 1px solid
-        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.14));
+    border: 1px solid var(--app-border);
     border-radius: 12px;
-    background: var(--tg-theme-bg-color, #ffffff);
+    background: var(--app-card-bg);
     padding: 12px;
     text-align: left;
     display: flex;
@@ -529,12 +542,12 @@
 .role-choice-title {
     font-size: 15px;
     font-weight: 700;
-    color: var(--tg-theme-text-color, #11181c);
+    color: var(--app-text);
 }
 
 .role-choice-description {
     font-size: 13px;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     line-height: 1.35;
 }
 
@@ -550,7 +563,7 @@
 
 .inline-hint {
     margin: 2px 0 0;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     font-size: 13px;
 }
 
@@ -560,11 +573,10 @@
 }
 
 .proposal-card {
-    border: 1px solid
-        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.12));
+    border: 1px solid var(--app-border);
     border-radius: 12px;
     padding: 11px;
-    background: var(--tg-theme-bg-color, #ffffff);
+    background: var(--app-card-bg);
 }
 
 .proposal-title {
@@ -585,14 +597,14 @@
 
 .proposal-mini-meta {
     margin: 2px 0 0;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     font-size: 12px;
     line-height: 1.3;
 }
 
 .proposal-meta {
     margin: 4px 0 0;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     font-size: 13px;
 }
 
@@ -605,11 +617,10 @@
 
 .proposal-skill-chip {
     border-radius: 999px;
-    border: 1px solid
-        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.16));
+    border: 1px solid var(--app-border);
     padding: 3px 8px;
     font-size: 12px;
-    color: var(--tg-theme-text-color, #11181c);
+    color: var(--app-text);
     background: color-mix(
         in srgb,
         var(--tg-theme-link-color, #248dff) 7%,
@@ -619,7 +630,7 @@
 
 .proposal-mini-about {
     margin: 8px 0 0;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     font-size: 13px;
     line-height: 1.35;
 }
@@ -653,8 +664,7 @@
 
 .proposal-profile-gate {
     margin-top: 10px;
-    border: 1px dashed
-        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.2));
+    border: 1px dashed var(--app-border);
     border-radius: 12px;
     padding: 10px;
 }
@@ -672,7 +682,7 @@
 
 .profile-check-item {
     margin: 0;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     font-size: 13px;
     line-height: 1.35;
 }
@@ -681,7 +691,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
 }
 
 .account-menu-after-text {
@@ -696,11 +706,10 @@
 }
 
 .status-history-card {
-    border: 1px solid
-        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.12));
+    border: 1px solid var(--app-border);
     border-radius: 12px;
     padding: 10px 11px;
-    background: var(--tg-theme-bg-color, #ffffff);
+    background: var(--app-card-bg);
 }
 
 .status-history-line {
@@ -711,7 +720,7 @@
 
 .status-history-meta {
     margin: 4px 0 0;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     font-size: 13px;
 }
 
@@ -727,11 +736,10 @@
 }
 
 .notification-card {
-    border: 1px solid
-        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.12));
+    border: 1px solid var(--app-border);
     border-radius: 12px;
     padding: 10px 11px;
-    background: var(--tg-theme-bg-color, #ffffff);
+    background: var(--app-card-bg);
 }
 
 .notification-unread {
@@ -760,7 +768,7 @@
 
 .notification-meta {
     margin: 7px 0 0;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     font-size: 12px;
 }
 
@@ -839,13 +847,8 @@
     gap: 8px;
     padding: 8px;
     border-radius: 16px;
-    border: 1px solid
-        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.12));
-    background: color-mix(
-        in srgb,
-        var(--tg-theme-section-bg-color, #ffffff) 94%,
-        transparent
-    );
+    border: 1px solid var(--app-border);
+    background: color-mix(in srgb, var(--app-section-bg) 94%, transparent);
     backdrop-filter: blur(10px);
 }
 
@@ -855,7 +858,7 @@
     border-radius: 12px;
     border: 1px solid transparent;
     background: transparent;
-    color: var(--tg-theme-hint-color, #788898);
+    color: var(--app-hint);
     display: inline-flex;
     flex-direction: column;
     justify-content: center;
