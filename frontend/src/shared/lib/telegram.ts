@@ -22,9 +22,12 @@ export const getSafeState = (): WebAppState => {
   WebApp.expand();
 
   const initUser = WebApp.initDataUnsafe?.user;
+  const hasInitData =
+    typeof WebApp.initData === "string" && WebApp.initData.length > 0;
+  const isTelegramContext = Boolean(hasInitData || initUser);
 
   return {
-    isTelegram: true,
+    isTelegram: isTelegramContext,
     platform: WebApp.platform,
     uiPlatform: WebApp.platform === "ios" ? "ios" : "base",
     appearance: WebApp.colorScheme === "dark" ? "dark" : "light",
