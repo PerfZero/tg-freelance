@@ -50,6 +50,7 @@ type TgUser = {
 };
 
 type PrimaryRoleValue = "CUSTOMER" | "EXECUTOR";
+type ExperienceLevelValue = "JUNIOR" | "MIDDLE" | "SENIOR";
 
 type WebAppState = {
   isTelegram: boolean;
@@ -72,6 +73,9 @@ type PublicUser = {
   profile: {
     about: string | null;
     skills: string[];
+    portfolioLinks: string[];
+    basePrice: number | null;
+    experienceLevel: ExperienceLevelValue | null;
     avatarUrl: string | null;
     hasCustomAvatar: boolean;
     rating: number;
@@ -160,6 +164,9 @@ type ProposalItem = {
     profile: {
       about: string | null;
       skills: string[];
+      portfolioLinks: string[];
+      basePrice: number | null;
+      experienceLevel: ExperienceLevelValue | null;
       avatarUrl: string | null;
       rating: number;
       completedTasksCount: number;
@@ -193,6 +200,14 @@ type ProposalForm = {
   etaDays: string;
 };
 
+type ExecutorProfileForm = {
+  about: string;
+  skills: string;
+  portfolioLinks: string;
+  basePrice: string;
+  experienceLevel: ExperienceLevelValue | "";
+};
+
 type TabState = "list" | "create" | "profile";
 
 const TOKEN_KEY = "tg_freelance_access_token";
@@ -221,6 +236,14 @@ const DEFAULT_PROPOSAL_FORM: ProposalForm = {
   etaDays: "",
 };
 
+const DEFAULT_EXECUTOR_PROFILE_FORM: ExecutorProfileForm = {
+  about: "",
+  skills: "",
+  portfolioLinks: "",
+  basePrice: "",
+  experienceLevel: "",
+};
+
 const STATUS_OPTIONS: Array<{ value: TaskStatusValue; label: string }> = [
   { value: "OPEN", label: "Открыта" },
   { value: "IN_PROGRESS", label: "В работе" },
@@ -233,6 +256,15 @@ const SORT_OPTIONS: Array<{ value: SortValue; label: string }> = [
   { value: "new", label: "Сначала новые" },
   { value: "budget", label: "Дороже сверху" },
   { value: "budget_asc", label: "Дешевле сверху" },
+];
+
+const EXPERIENCE_LEVEL_OPTIONS: Array<{
+  value: ExperienceLevelValue;
+  label: string;
+}> = [
+  { value: "JUNIOR", label: "Junior" },
+  { value: "MIDDLE", label: "Middle" },
+  { value: "SENIOR", label: "Senior" },
 ];
 
 const getApiBaseUrl = (): string => {
@@ -394,6 +426,80 @@ const formatMoney = (value: number): string =>
 
 const formatRating = (value: number): string =>
   Number.isFinite(value) ? value.toFixed(1) : "0.0";
+
+const toDelimitedList = (value: string): string[] =>
+  value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
+const isValidHttpUrl = (value: string): boolean => {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+const toExecutorProfileForm = (
+  profile: PublicUser["profile"] | null,
+): ExecutorProfileForm => ({
+  about: profile?.about ?? "",
+  skills: profile?.skills.join(", ") ?? "",
+  portfolioLinks: profile?.portfolioLinks.join("\n") ?? "",
+  basePrice: profile?.basePrice ? String(profile.basePrice) : "",
+  experienceLevel: profile?.experienceLevel ?? "",
+});
+
+const getExperienceLevelLabel = (
+  value: ExperienceLevelValue | null,
+): string => {
+  if (value === "JUNIOR") {
+    return "Junior";
+  }
+
+  if (value === "MIDDLE") {
+    return "Middle";
+  }
+
+  if (value === "SENIOR") {
+    return "Senior";
+  }
+
+  return "Не указан";
+};
+
+const getExecutorProfileCheck = (
+  profile: PublicUser["profile"] | null,
+): { isComplete: boolean; missing: string[] } => {
+  const missing: string[] = [];
+
+  if (!profile?.about || profile.about.trim().length < 20) {
+    missing.push("О себе (минимум 20 символов)");
+  }
+
+  if (!profile || profile.skills.length === 0) {
+    missing.push("Навыки");
+  }
+
+  if (!profile || profile.portfolioLinks.length === 0) {
+    missing.push("Портфолио (хотя бы 1 ссылка)");
+  }
+
+  if (!profile?.basePrice || profile.basePrice <= 0) {
+    missing.push("Базовая ставка");
+  }
+
+  if (!profile?.experienceLevel) {
+    missing.push("Уровень опыта");
+  }
+
+  return {
+    isComplete: missing.length === 0,
+    missing,
+  };
+};
 
 const formatDate = (value: string | null): string => {
   if (!value) {
@@ -585,6 +691,12 @@ function App() {
   const [roleSaveError, setRoleSaveError] = useState<string | null>(null);
   const [avatarSavePending, setAvatarSavePending] = useState(false);
   const [avatarSaveError, setAvatarSaveError] = useState<string | null>(null);
+  const [executorProfileForm, setExecutorProfileForm] =
+    useState<ExecutorProfileForm>(DEFAULT_EXECUTOR_PROFILE_FORM);
+  const [executorProfilePending, setExecutorProfilePending] = useState(false);
+  const [executorProfileError, setExecutorProfileError] = useState<
+    string | null
+  >(null);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   const [filterDraft, setFilterDraft] = useState<TaskFilters>(DEFAULT_FILTERS);
@@ -682,6 +794,11 @@ function App() {
       proposals.find((proposal) => proposal.executorId === authUser.id) ?? null
     );
   }, [proposals, authUser]);
+
+  const executorProfileCheck = useMemo(
+    () => getExecutorProfileCheck(authUser?.profile ?? null),
+    [authUser],
+  );
 
   const requestStatusHistory = (taskId: string, authToken: string) =>
     apiRequest<{ items: TaskStatusHistoryItem[] }>(
@@ -916,6 +1033,11 @@ function App() {
       window.clearInterval(timerId);
     };
   }, [token, requestNotifications, refreshNotifications]);
+
+  useEffect(() => {
+    setExecutorProfileForm(toExecutorProfileForm(authUser?.profile ?? null));
+    setExecutorProfileError(null);
+  }, [authUser]);
 
   useEffect(() => {
     if (!token) {
@@ -1736,6 +1858,80 @@ function App() {
     }
   };
 
+  const handleSaveExecutorProfile = async (): Promise<void> => {
+    if (!token) {
+      return;
+    }
+
+    const about = executorProfileForm.about.trim();
+    const skills = toDelimitedList(executorProfileForm.skills);
+    const portfolioLinks = toDelimitedList(executorProfileForm.portfolioLinks);
+    const basePrice = Number(executorProfileForm.basePrice);
+    const experienceLevel = executorProfileForm.experienceLevel;
+
+    if (about.length < 20) {
+      setExecutorProfileError("Блок «О себе» должен быть минимум 20 символов.");
+      return;
+    }
+
+    if (skills.length === 0) {
+      setExecutorProfileError("Добавь хотя бы 1 навык.");
+      return;
+    }
+
+    if (portfolioLinks.length === 0) {
+      setExecutorProfileError("Добавь хотя бы 1 ссылку на портфолио.");
+      return;
+    }
+
+    if (!portfolioLinks.every(isValidHttpUrl)) {
+      setExecutorProfileError(
+        "Ссылки портфолио должны быть валидными URL (http/https).",
+      );
+      return;
+    }
+
+    if (!Number.isFinite(basePrice) || basePrice <= 0) {
+      setExecutorProfileError("Укажи базовую ставку больше 0.");
+      return;
+    }
+
+    if (!experienceLevel) {
+      setExecutorProfileError("Выбери уровень опыта.");
+      return;
+    }
+
+    try {
+      setExecutorProfilePending(true);
+      setExecutorProfileError(null);
+
+      const response = await apiRequest<{ user: PublicUser }>(
+        "/profile/me",
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            about,
+            skills,
+            portfolio_links: portfolioLinks,
+            base_price: basePrice,
+            experience_level: experienceLevel,
+          }),
+        },
+        token,
+      );
+
+      setAuthUser(response.user);
+    } catch (error) {
+      setExecutorProfileError(
+        error instanceof Error
+          ? error.message
+          : "Не удалось сохранить профиль исполнителя",
+      );
+    } finally {
+      setExecutorProfilePending(false);
+    }
+  };
+
   const renderRoleOnboarding = (): JSX.Element => (
     <Section
       header="Стартовый режим"
@@ -1903,6 +2099,117 @@ function App() {
         </Section>
 
         <Section
+          header="Профиль исполнителя"
+          footer="Заполни этот блок, чтобы заказчики могли выбирать тебя по данным, а не случайно."
+        >
+          <Cell
+            subtitle="Готовность к откликам"
+            after={executorProfileCheck.isComplete ? "Заполнен" : "Неполный"}
+          >
+            Профиль исполнителя
+          </Cell>
+
+          {!executorProfileCheck.isComplete ? (
+            <div className="profile-check-list">
+              {executorProfileCheck.missing.map((item) => (
+                <p key={item} className="profile-check-item">
+                  • {item}
+                </p>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="form-grid">
+            <Textarea
+              header="О себе"
+              placeholder="Коротко: что умеешь, в чем специализируешься, как обычно работаешь."
+              value={executorProfileForm.about}
+              onChange={(event) =>
+                setExecutorProfileForm((prev) => ({
+                  ...prev,
+                  about: event.target.value,
+                }))
+              }
+            />
+            <Input
+              header="Навыки"
+              placeholder="react, node.js, figma"
+              value={executorProfileForm.skills}
+              onChange={(event) =>
+                setExecutorProfileForm((prev) => ({
+                  ...prev,
+                  skills: event.target.value,
+                }))
+              }
+            />
+            <Textarea
+              header="Портфолио (ссылки)"
+              placeholder="По одной ссылке в строке или через запятую"
+              value={executorProfileForm.portfolioLinks}
+              onChange={(event) =>
+                setExecutorProfileForm((prev) => ({
+                  ...prev,
+                  portfolioLinks: event.target.value,
+                }))
+              }
+              rows={3}
+            />
+            <Input
+              header="Базовая ставка (RUB)"
+              type="number"
+              placeholder="5000"
+              value={executorProfileForm.basePrice}
+              onChange={(event) =>
+                setExecutorProfileForm((prev) => ({
+                  ...prev,
+                  basePrice: event.target.value,
+                }))
+              }
+            />
+          </div>
+
+          <p className="form-label">Уровень опыта</p>
+          <div className="chip-row">
+            {EXPERIENCE_LEVEL_OPTIONS.map((option) => (
+              <Button
+                key={option.value}
+                size="s"
+                mode={
+                  executorProfileForm.experienceLevel === option.value
+                    ? "filled"
+                    : "outline"
+                }
+                onClick={() =>
+                  setExecutorProfileForm((prev) => ({
+                    ...prev,
+                    experienceLevel: option.value,
+                  }))
+                }
+              >
+                {option.label}
+              </Button>
+            ))}
+          </div>
+
+          {executorProfileError ? (
+            <p className="error-text">{executorProfileError}</p>
+          ) : null}
+
+          <div className="row-actions row-actions-tight">
+            <Button
+              mode="filled"
+              size="m"
+              disabled={executorProfilePending}
+              onClick={() => {
+                void handleSaveExecutorProfile();
+              }}
+            >
+              {executorProfilePending ? "Сохраняем..." : "Сохранить профиль"}
+            </Button>
+          </div>
+        </Section>
+
+        <Section
           header={`Уведомления (${notificationsUnreadCount})`}
           footer="Отметь уведомления прочитанными, чтобы держать ленту чистой."
         >
@@ -2053,6 +2360,34 @@ function App() {
               }
             >
               Компетенции
+            </Cell>
+            <Cell
+              subtitle="Уровень"
+              after={getExperienceLevelLabel(
+                publicProfile?.experienceLevel ?? null,
+              )}
+            >
+              Опыт
+            </Cell>
+            <Cell
+              subtitle="Базовая ставка"
+              after={
+                publicProfile?.basePrice
+                  ? formatMoney(publicProfile.basePrice)
+                  : "Не указана"
+              }
+            >
+              Стоимость
+            </Cell>
+            <Cell
+              subtitle="Портфолио"
+              description={
+                publicProfile && publicProfile.portfolioLinks.length > 0
+                  ? publicProfile.portfolioLinks.slice(0, 3).join(" • ")
+                  : "Ссылки не добавлены"
+              }
+            >
+              Кейсы
             </Cell>
             <Cell subtitle="Рейтинг" after={String(publicProfile?.rating ?? 0)}>
               Репутация
@@ -2407,6 +2742,7 @@ function App() {
       detailTask.customerId !== authUser.id && detailTask.status === "OPEN";
     const canSelectExecutor =
       detailTask.customerId === authUser.id && detailTask.status === "OPEN";
+    const canCreateProposal = executorProfileCheck.isComplete;
 
     return (
       <Section
@@ -2439,6 +2775,8 @@ function App() {
                   executorProfile && executorProfile.skills.length > 0
                     ? executorProfile.skills.slice(0, 5)
                     : [];
+                const portfolioPreview =
+                  executorProfile?.portfolioLinks?.[0] ?? null;
 
                 return (
                   <div key={proposal.id} className="proposal-card">
@@ -2454,8 +2792,18 @@ function App() {
                         </p>
                         <p className="proposal-mini-meta">
                           Рейтинг: {formatRating(executorProfile?.rating ?? 0)}{" "}
+                          • Опыт:{" "}
+                          {getExperienceLevelLabel(
+                            executorProfile?.experienceLevel ?? null,
+                          )}{" "}
                           • Завершено:{" "}
                           {String(executorProfile?.completedTasksCount ?? 0)}
+                        </p>
+                        <p className="proposal-mini-meta">
+                          База:{" "}
+                          {executorProfile?.basePrice
+                            ? formatMoney(executorProfile.basePrice)
+                            : "не указана"}
                         </p>
                       </div>
                     </div>
@@ -2477,6 +2825,11 @@ function App() {
                     {executorProfile?.about ? (
                       <p className="proposal-mini-about">
                         {trimText(executorProfile.about, 110)}
+                      </p>
+                    ) : null}
+                    {portfolioPreview ? (
+                      <p className="proposal-mini-portfolio">
+                        Портфолио: {trimText(portfolioPreview, 78)}
                       </p>
                     ) : null}
                     <p className="proposal-comment">{proposal.comment}</p>
@@ -2553,12 +2906,44 @@ function App() {
         ) : (
           <Placeholder
             header="Отклик не отправлен"
-            description="Оставь цену и сроки, чтобы заказчик мог выбрать тебя"
+            description={
+              canCreateProposal
+                ? "Оставь цену и сроки, чтобы заказчик мог выбрать тебя"
+                : "Перед откликом нужно заполнить профиль исполнителя."
+            }
           />
         )}
 
         {!isDetailOwner &&
         canManageOwnProposal &&
+        !canCreateProposal &&
+        !ownProposal ? (
+          <div className="proposal-profile-gate">
+            <p className="proposal-profile-gate-title">
+              Чтобы откликаться, заполни профиль исполнителя:
+            </p>
+            <div className="profile-check-list">
+              {executorProfileCheck.missing.map((item) => (
+                <p key={item} className="profile-check-item">
+                  • {item}
+                </p>
+              ))}
+            </div>
+            <div className="row-actions row-actions-tight">
+              <Button
+                mode="filled"
+                size="m"
+                onClick={() => navigate("/account")}
+              >
+                Заполнить профиль
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {!isDetailOwner &&
+        canManageOwnProposal &&
+        canCreateProposal &&
         (!ownProposal || proposalEditMode) ? (
           <div className="form-grid proposal-form">
             <Input

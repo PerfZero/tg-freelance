@@ -11,6 +11,9 @@ type ProfilePatchPayload = {
   display_name?: unknown;
   about?: unknown;
   skills?: unknown;
+  portfolio_links?: unknown;
+  base_price?: unknown;
+  experience_level?: unknown;
   primary_role?: unknown;
   custom_avatar_data_url?: unknown;
 };
@@ -19,9 +22,13 @@ const MAX_DISPLAY_NAME_LENGTH = 80;
 const MAX_ABOUT_LENGTH = 2000;
 const MAX_SKILLS = 30;
 const MAX_SKILL_LENGTH = 40;
+const MAX_PORTFOLIO_LINKS = 20;
+const MAX_PORTFOLIO_LINK_LENGTH = 500;
 const MAX_CUSTOM_AVATAR_DATA_URL_LENGTH = 1_500_000;
 const PRIMARY_ROLES = ["CUSTOMER", "EXECUTOR"] as const;
+const EXPERIENCE_LEVELS = ["JUNIOR", "MIDDLE", "SENIOR"] as const;
 type PrimaryRoleValue = (typeof PRIMARY_ROLES)[number];
+type ExperienceLevelValue = (typeof EXPERIENCE_LEVELS)[number];
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -118,6 +125,118 @@ const parseSkills = (
   };
 };
 
+const isHttpUrl = (value: string): boolean => {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+const parsePortfolioLinks = (
+  value: unknown,
+): { provided: boolean; normalized?: string[] } => {
+  if (value === undefined) {
+    return { provided: false };
+  }
+
+  assertValidation(
+    Array.isArray(value),
+    "portfolio_links must be an array of strings",
+  );
+
+  const normalized = (value as unknown[]).map((entry, index) => {
+    assertValidation(
+      typeof entry === "string",
+      `portfolio_links[${index}] must be a string`,
+    );
+
+    const link = normalizeString(entry as string);
+
+    assertValidation(
+      link.length > 0,
+      `portfolio_links[${index}] cannot be empty`,
+    );
+    assertValidation(
+      link.length <= MAX_PORTFOLIO_LINK_LENGTH,
+      `portfolio_links[${index}] must be at most ${MAX_PORTFOLIO_LINK_LENGTH} characters`,
+    );
+    assertValidation(
+      isHttpUrl(link),
+      `portfolio_links[${index}] must be a valid http/https URL`,
+    );
+
+    return link;
+  });
+
+  assertValidation(
+    normalized.length <= MAX_PORTFOLIO_LINKS,
+    `portfolio_links must contain at most ${MAX_PORTFOLIO_LINKS} items`,
+  );
+
+  return {
+    provided: true,
+    normalized,
+  };
+};
+
+const parseBasePrice = (
+  value: unknown,
+): { provided: boolean; normalized?: string | null } => {
+  if (value === undefined) {
+    return { provided: false };
+  }
+
+  if (value === null) {
+    return { provided: true, normalized: null };
+  }
+
+  assertValidation(
+    typeof value === "string" || typeof value === "number",
+    "base_price must be a number or null",
+  );
+
+  const parsed = Number(value);
+
+  assertValidation(Number.isFinite(parsed), "base_price must be a number");
+  assertValidation(parsed > 0, "base_price must be greater than 0");
+
+  return {
+    provided: true,
+    normalized: String(parsed),
+  };
+};
+
+const parseExperienceLevel = (
+  value: unknown,
+): { provided: boolean; normalized?: ExperienceLevelValue | null } => {
+  if (value === undefined) {
+    return { provided: false };
+  }
+
+  if (value === null) {
+    return { provided: true, normalized: null };
+  }
+
+  assertValidation(
+    typeof value === "string",
+    "experience_level must be JUNIOR, MIDDLE, SENIOR or null",
+  );
+
+  const normalized = normalizeString(value as string).toUpperCase();
+
+  assertValidation(
+    EXPERIENCE_LEVELS.includes(normalized as ExperienceLevelValue),
+    "experience_level must be JUNIOR, MIDDLE or SENIOR",
+  );
+
+  return {
+    provided: true,
+    normalized: normalized as ExperienceLevelValue,
+  };
+};
+
 const parsePrimaryRole = (
   value: unknown,
 ): { provided: boolean; normalized?: PrimaryRoleValue | null } => {
@@ -204,6 +323,9 @@ const patchProfile = async (
   const parsedDisplayName = parseDisplayName(payload.display_name);
   const parsedAbout = parseAbout(payload.about);
   const parsedSkills = parseSkills(payload.skills);
+  const parsedPortfolioLinks = parsePortfolioLinks(payload.portfolio_links);
+  const parsedBasePrice = parseBasePrice(payload.base_price);
+  const parsedExperienceLevel = parseExperienceLevel(payload.experience_level);
   const parsedPrimaryRole = parsePrimaryRole(payload.primary_role);
   const parsedCustomAvatarDataUrl = parseCustomAvatarDataUrl(
     payload.custom_avatar_data_url,
@@ -213,6 +335,9 @@ const patchProfile = async (
     parsedDisplayName.provided ||
     parsedAbout.provided ||
     parsedSkills.provided ||
+    parsedPortfolioLinks.provided ||
+    parsedBasePrice.provided ||
+    parsedExperienceLevel.provided ||
     parsedPrimaryRole.provided ||
     parsedCustomAvatarDataUrl.provided;
 
@@ -230,6 +355,9 @@ const patchProfile = async (
   if (
     parsedAbout.provided ||
     parsedSkills.provided ||
+    parsedPortfolioLinks.provided ||
+    parsedBasePrice.provided ||
+    parsedExperienceLevel.provided ||
     parsedPrimaryRole.provided ||
     parsedCustomAvatarDataUrl.provided
   ) {
@@ -238,6 +366,15 @@ const patchProfile = async (
       update: {
         ...(parsedAbout.provided ? { about: parsedAbout.normalized } : {}),
         ...(parsedSkills.provided ? { skills: parsedSkills.normalized } : {}),
+        ...(parsedPortfolioLinks.provided
+          ? { portfolioLinks: parsedPortfolioLinks.normalized }
+          : {}),
+        ...(parsedBasePrice.provided
+          ? { basePrice: parsedBasePrice.normalized }
+          : {}),
+        ...(parsedExperienceLevel.provided
+          ? { experienceLevel: parsedExperienceLevel.normalized }
+          : {}),
         ...(parsedPrimaryRole.provided
           ? { primaryRole: parsedPrimaryRole.normalized }
           : {}),
@@ -249,6 +386,13 @@ const patchProfile = async (
         userId,
         about: parsedAbout.provided ? parsedAbout.normalized : null,
         skills: parsedSkills.provided ? (parsedSkills.normalized ?? []) : [],
+        portfolioLinks: parsedPortfolioLinks.provided
+          ? (parsedPortfolioLinks.normalized ?? [])
+          : [],
+        basePrice: parsedBasePrice.provided ? parsedBasePrice.normalized : null,
+        experienceLevel: parsedExperienceLevel.provided
+          ? parsedExperienceLevel.normalized
+          : null,
         primaryRole: parsedPrimaryRole.provided
           ? parsedPrimaryRole.normalized
           : null,

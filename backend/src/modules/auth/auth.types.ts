@@ -4,9 +4,14 @@ export type UserWithProfile = User & {
   profile: Profile | null;
 };
 
+export type ExperienceLevelValue = "JUNIOR" | "MIDDLE" | "SENIOR";
+
 export type PublicProfile = {
   about: string | null;
   skills: string[];
+  portfolioLinks: string[];
+  basePrice: number | null;
+  experienceLevel: ExperienceLevelValue | null;
   avatarUrl: string | null;
   hasCustomAvatar: boolean;
   rating: number;

@@ -101,6 +101,9 @@ const proposalSelect = {
         select: {
           about: true,
           skills: true,
+          portfolioLinks: true,
+          basePrice: true,
+          experienceLevel: true,
           telegramAvatarUrl: true,
           customAvatarDataUrl: true,
           rating: true,
@@ -408,6 +411,11 @@ const mapProposal = (proposal: ProposalView) => ({
           ? {
               about: proposal.executor.profile.about,
               skills: proposal.executor.profile.skills,
+              portfolioLinks: proposal.executor.profile.portfolioLinks,
+              basePrice: proposal.executor.profile.basePrice
+                ? Number(proposal.executor.profile.basePrice.toString())
+                : null,
+              experienceLevel: proposal.executor.profile.experienceLevel,
               avatarUrl:
                 proposal.executor.profile.customAvatarDataUrl ??
                 proposal.executor.profile.telegramAvatarUrl ??
