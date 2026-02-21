@@ -1,5 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import WebApp from "@twa-dev/sdk";
+import {
+  ArrowLeft,
+  Check,
+  CheckCheck,
+  ChevronLeft,
+  ChevronRight,
+  CirclePlus,
+  Filter,
+  Home,
+  RefreshCw,
+  RotateCcw,
+  UserRound,
+} from "lucide-react";
 import {
   AppRoot,
   Avatar,
@@ -581,17 +594,20 @@ function App() {
       authToken,
     );
 
-  const requestNotifications = (authToken: string) =>
-    apiRequest<{
-      items: NotificationItem[];
-      unreadCount: number;
-      pagination: {
-        page: number;
-        limit: number;
-        total: number;
-        totalPages: number;
-      };
-    }>("/notifications?page=1&limit=20", {}, authToken);
+  const requestNotifications = useCallback(
+    (authToken: string) =>
+      apiRequest<{
+        items: NotificationItem[];
+        unreadCount: number;
+        pagination: {
+          page: number;
+          limit: number;
+          total: number;
+          totalPages: number;
+        };
+      }>("/notifications?page=1&limit=20", {}, authToken),
+    [],
+  );
 
   const refreshStatusHistory = async (): Promise<void> => {
     if (!token || !detailTaskId) {
@@ -616,38 +632,39 @@ function App() {
     }
   };
 
-  const refreshNotifications = async (options?: {
-    silent?: boolean;
-  }): Promise<void> => {
-    if (!token) {
-      return;
-    }
-
-    const isSilent = options?.silent === true;
-
-    try {
-      if (!isSilent) {
-        setNotificationsLoading(true);
+  const refreshNotifications = useCallback(
+    async (options?: { silent?: boolean }): Promise<void> => {
+      if (!token) {
+        return;
       }
-      setNotificationsError(null);
 
-      const response = await requestNotifications(token);
-      setNotifications(response.items);
-      setNotificationsUnreadCount(response.unreadCount);
-    } catch (error) {
-      setNotifications([]);
-      setNotificationsUnreadCount(0);
-      setNotificationsError(
-        error instanceof Error
-          ? error.message
-          : "Не удалось загрузить уведомления",
-      );
-    } finally {
-      if (!isSilent) {
-        setNotificationsLoading(false);
+      const isSilent = options?.silent === true;
+
+      try {
+        if (!isSilent) {
+          setNotificationsLoading(true);
+        }
+        setNotificationsError(null);
+
+        const response = await requestNotifications(token);
+        setNotifications(response.items);
+        setNotificationsUnreadCount(response.unreadCount);
+      } catch (error) {
+        setNotifications([]);
+        setNotificationsUnreadCount(0);
+        setNotificationsError(
+          error instanceof Error
+            ? error.message
+            : "Не удалось загрузить уведомления",
+        );
+      } finally {
+        if (!isSilent) {
+          setNotificationsLoading(false);
+        }
       }
-    }
-  };
+    },
+    [requestNotifications, token],
+  );
 
   useEffect(() => {
     if (location.pathname === "/") {
@@ -786,7 +803,7 @@ function App() {
       active = false;
       window.clearInterval(timerId);
     };
-  }, [token]);
+  }, [token, requestNotifications, refreshNotifications]);
 
   useEffect(() => {
     if (!token) {
@@ -1501,7 +1518,10 @@ function App() {
                 void handleReadAllNotifications();
               }}
             >
-              Прочитать все
+              <span className="btn-with-icon">
+                <CheckCheck size={16} />
+                <span>Прочитать все</span>
+              </span>
             </Button>
             <Button
               mode="bezeled"
@@ -1511,7 +1531,10 @@ function App() {
                 void refreshNotifications();
               }}
             >
-              Обновить
+              <span className="btn-with-icon">
+                <RefreshCw size={16} />
+                <span>Обновить</span>
+              </span>
             </Button>
           </div>
 
@@ -1589,10 +1612,18 @@ function App() {
               mode={filtersOpen ? "filled" : "outline"}
               onClick={() => setFiltersOpen((prev) => !prev)}
             >
-              {filtersOpen ? "Скрыть фильтры" : "Показать фильтры"}
+              <span className="btn-with-icon">
+                <Filter size={16} />
+                <span>
+                  {filtersOpen ? "Скрыть фильтры" : "Показать фильтры"}
+                </span>
+              </span>
             </Button>
             <Button size="m" mode="bezeled" onClick={() => navigate("/create")}>
-              Создать задачу
+              <span className="btn-with-icon">
+                <CirclePlus size={16} />
+                <span>Создать задачу</span>
+              </span>
             </Button>
           </div>
 
@@ -1695,10 +1726,16 @@ function App() {
 
               <div className="row-actions row-actions-tight">
                 <Button size="m" mode="filled" onClick={handleApplyFilters}>
-                  Применить
+                  <span className="btn-with-icon">
+                    <Check size={16} />
+                    <span>Применить</span>
+                  </span>
                 </Button>
                 <Button size="m" mode="outline" onClick={handleResetFilters}>
-                  Сбросить
+                  <span className="btn-with-icon">
+                    <RotateCcw size={16} />
+                    <span>Сбросить</span>
+                  </span>
                 </Button>
               </div>
             </>
@@ -1744,7 +1781,10 @@ function App() {
               disabled={page <= 1 || listLoading}
               onClick={() => setPage((prev) => prev - 1)}
             >
-              Назад
+              <span className="btn-with-icon">
+                <ChevronLeft size={16} />
+                <span>Назад</span>
+              </span>
             </Button>
             <Button
               mode="outline"
@@ -1756,7 +1796,10 @@ function App() {
               }
               onClick={() => setPage((prev) => prev + 1)}
             >
-              Вперед
+              <span className="btn-with-icon">
+                <span>Вперед</span>
+                <ChevronRight size={16} />
+              </span>
             </Button>
           </div>
         </Section>
@@ -1838,10 +1881,18 @@ function App() {
             void handleCreateTask();
           }}
         >
-          {createPending ? "Публикуем..." : "Опубликовать задачу"}
+          <span className="btn-with-icon">
+            <CirclePlus size={16} />
+            <span>
+              {createPending ? "Публикуем..." : "Опубликовать задачу"}
+            </span>
+          </span>
         </Button>
         <Button mode="outline" size="l" onClick={() => navigate("/feed")}>
-          Назад к ленте
+          <span className="btn-with-icon">
+            <ArrowLeft size={16} />
+            <span>Назад к ленте</span>
+          </span>
         </Button>
       </div>
     </Section>
@@ -2098,7 +2149,10 @@ function App() {
 
           <div className="row-actions">
             <Button mode="outline" onClick={() => navigate("/feed")}>
-              К ленте
+              <span className="btn-with-icon">
+                <Home size={16} />
+                <span>К ленте</span>
+              </span>
             </Button>
             {canEdit ? (
               <Button
@@ -2367,51 +2421,13 @@ function App() {
       platform={webAppState.uiPlatform}
     >
       <main className="app-shell">
-        <Section>
-          <div className="app-head">
-            <Avatar size={48} acronym={profileAcronym} />
-            <div>
-              <p className="app-title">TG Freelance</p>
-              <p className="app-subtitle">
-                {authUser
-                  ? `Вы вошли как ${authUser.displayName}`
-                  : "Подключение аккаунта..."}
-              </p>
-            </div>
-          </div>
-
-          <div className="tab-row">
-            <Button
-              mode={activeTab === "list" ? "filled" : "outline"}
-              size="m"
-              onClick={() => switchTab("list")}
-            >
-              Лента
-            </Button>
-            <Button
-              mode={activeTab === "create" ? "filled" : "outline"}
-              size="m"
-              onClick={() => switchTab("create")}
-            >
-              Создать
-            </Button>
-            <Button
-              mode={activeTab === "profile" ? "filled" : "outline"}
-              size="m"
-              onClick={() => switchTab("profile")}
-            >
-              {notificationsUnreadCount > 0
-                ? `Профиль (${notificationsUnreadCount})`
-                : "Профиль"}
-            </Button>
-          </div>
-
-          {detailTaskId && detailTask ? (
+        {detailTaskId && detailTask ? (
+          <Section>
             <p className="inline-hint">
               Сейчас открыт просмотр задачи «{trimText(detailTask.title, 40)}»
             </p>
-          ) : null}
-        </Section>
+          </Section>
+        ) : null}
 
         <div className="page-content">
           {authGate ? (
@@ -2427,6 +2443,40 @@ function App() {
             </Routes>
           )}
         </div>
+
+        {!authGate ? (
+          <nav className="bottom-nav">
+            <button
+              className={`bottom-nav-item ${activeTab === "list" ? "bottom-nav-item-active" : ""}`}
+              type="button"
+              onClick={() => switchTab("list")}
+            >
+              <Home size={18} />
+              <span>Лента</span>
+            </button>
+            <button
+              className={`bottom-nav-item ${activeTab === "create" ? "bottom-nav-item-active" : ""}`}
+              type="button"
+              onClick={() => switchTab("create")}
+            >
+              <CirclePlus size={18} />
+              <span>Создать</span>
+            </button>
+            <button
+              className={`bottom-nav-item ${activeTab === "profile" ? "bottom-nav-item-active" : ""}`}
+              type="button"
+              onClick={() => switchTab("profile")}
+            >
+              <UserRound size={18} />
+              <span>Профиль</span>
+              {notificationsUnreadCount > 0 ? (
+                <span className="bottom-nav-badge">
+                  {notificationsUnreadCount}
+                </span>
+              ) : null}
+            </button>
+          </nav>
+        ) : null}
       </main>
     </AppRoot>
   );
