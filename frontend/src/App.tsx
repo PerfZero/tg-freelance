@@ -431,7 +431,10 @@ const buildTasksQuery = (page: number, filters: TaskFilters): string => {
 
 function App() {
   const webAppState = useMemo(() => getSafeState(), []);
-  const profileAcronym = useMemo(() => getAcronym(webAppState.user), [webAppState.user]);
+  const profileAcronym = useMemo(
+    () => getAcronym(webAppState.user),
+    [webAppState.user],
+  );
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -450,7 +453,9 @@ function App() {
   const [authError, setAuthError] = useState<string | null>(null);
 
   const [filterDraft, setFilterDraft] = useState<TaskFilters>(DEFAULT_FILTERS);
-  const [filterApplied, setFilterApplied] = useState<TaskFilters>(DEFAULT_FILTERS);
+  const [filterApplied, setFilterApplied] =
+    useState<TaskFilters>(DEFAULT_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
 
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -480,7 +485,9 @@ function App() {
   const [proposalsLoading, setProposalsLoading] = useState(false);
   const [proposalsError, setProposalsError] = useState<string | null>(null);
 
-  const [proposalForm, setProposalForm] = useState<ProposalForm>(DEFAULT_PROPOSAL_FORM);
+  const [proposalForm, setProposalForm] = useState<ProposalForm>(
+    DEFAULT_PROPOSAL_FORM,
+  );
   const [proposalPending, setProposalPending] = useState(false);
   const [proposalError, setProposalError] = useState<string | null>(null);
   const [proposalEditMode, setProposalEditMode] = useState(false);
@@ -503,7 +510,9 @@ function App() {
       return null;
     }
 
-    return proposals.find((proposal) => proposal.executorId === authUser.id) ?? null;
+    return (
+      proposals.find((proposal) => proposal.executorId === authUser.id) ?? null
+    );
   }, [proposals, authUser]);
 
   useEffect(() => {
@@ -625,7 +634,9 @@ function App() {
         }
 
         setListError(
-          error instanceof Error ? error.message : "Не удалось загрузить задачи",
+          error instanceof Error
+            ? error.message
+            : "Не удалось загрузить задачи",
         );
       } finally {
         if (active) {
@@ -705,9 +716,15 @@ function App() {
           }
 
           const message =
-            error instanceof Error ? error.message : "Не удалось загрузить отклики";
+            error instanceof Error
+              ? error.message
+              : "Не удалось загрузить отклики";
 
-          if (message.includes("Only task owner or proposal author can view proposals")) {
+          if (
+            message.includes(
+              "Only task owner or proposal author can view proposals",
+            )
+          ) {
             setProposals([]);
           } else {
             setProposalsError(message);
@@ -719,7 +736,9 @@ function App() {
         }
 
         setDetailError(
-          error instanceof Error ? error.message : "Не удалось загрузить задачу",
+          error instanceof Error
+            ? error.message
+            : "Не удалось загрузить задачу",
         );
       } finally {
         if (active) {
@@ -754,12 +773,14 @@ function App() {
   const handleApplyFilters = (): void => {
     setPage(1);
     setFilterApplied(filterDraft);
+    setFiltersOpen(false);
   };
 
   const handleResetFilters = (): void => {
     setFilterDraft(DEFAULT_FILTERS);
     setFilterApplied(DEFAULT_FILTERS);
     setPage(1);
+    setFiltersOpen(false);
   };
 
   const openTaskDetail = (taskId: string): void => {
@@ -1028,7 +1049,9 @@ function App() {
       setDetailTask(response.task);
     } catch (error) {
       setProposalsError(
-        error instanceof Error ? error.message : "Не удалось выбрать исполнителя",
+        error instanceof Error
+          ? error.message
+          : "Не удалось выбрать исполнителя",
       );
     } finally {
       setSelectPendingId(null);
@@ -1048,7 +1071,9 @@ function App() {
         <List>
           <Cell
             before={<Avatar size={48} acronym={profileAcronym} />}
-            subtitle={authUser.username ? `@${authUser.username}` : "без username"}
+            subtitle={
+              authUser.username ? `@${authUser.username}` : "без username"
+            }
             description={
               webAppState.isTelegram
                 ? "Сессия Telegram активна"
@@ -1074,144 +1099,205 @@ function App() {
     );
   };
 
-  const renderTasksList = (): JSX.Element => (
-    <>
-      <Section
-        header="Лента задач"
-        footer="Выбери фильтры и нажми «Применить», чтобы обновить список."
-      >
-        <div className="form-grid">
-          <Input
-            header="Поиск"
-            placeholder="Например: лендинг"
-            value={filterDraft.q}
-            onChange={(event) =>
-              setFilterDraft((prev) => ({ ...prev, q: event.target.value }))
-            }
-          />
-          <Input
-            header="Категория"
-            placeholder="frontend"
-            value={filterDraft.category}
-            onChange={(event) =>
-              setFilterDraft((prev) => ({ ...prev, category: event.target.value }))
-            }
-          />
-          <Input
-            header="Бюджет от"
-            type="number"
-            value={filterDraft.budgetMin}
-            onChange={(event) =>
-              setFilterDraft((prev) => ({ ...prev, budgetMin: event.target.value }))
-            }
-          />
-          <Input
-            header="Бюджет до"
-            type="number"
-            value={filterDraft.budgetMax}
-            onChange={(event) =>
-              setFilterDraft((prev) => ({ ...prev, budgetMax: event.target.value }))
-            }
-          />
-        </div>
+  const renderTasksList = (): JSX.Element => {
+    const activeFiltersCount = [
+      filterApplied.q.trim(),
+      filterApplied.category.trim(),
+      filterApplied.budgetMin.trim(),
+      filterApplied.budgetMax.trim(),
+    ].filter((value) => value.length > 0).length;
 
-        <p className="form-label">Статус</p>
-        <div className="chip-row">
-          {STATUS_OPTIONS.map((statusOption) => (
+    const filtersSummary =
+      activeFiltersCount > 0
+        ? `Фильтров активно: ${activeFiltersCount}`
+        : "Фильтры не заданы";
+
+    return (
+      <>
+        <Section
+          header="Лента задач"
+          footer="Фильтры свернуты по умолчанию, чтобы сначала видеть список задач."
+        >
+          <div className="feed-toolbar">
             <Button
-              key={statusOption.value}
-              size="s"
-              mode={filterDraft.status === statusOption.value ? "filled" : "outline"}
-              onClick={() =>
-                setFilterDraft((prev) => ({ ...prev, status: statusOption.value }))
-              }
+              size="m"
+              mode={filtersOpen ? "filled" : "outline"}
+              onClick={() => setFiltersOpen((prev) => !prev)}
             >
-              {statusOption.label}
+              {filtersOpen ? "Скрыть фильтры" : "Показать фильтры"}
             </Button>
-          ))}
-        </div>
+            <Button size="m" mode="bezeled" onClick={() => navigate("/create")}>
+              Создать задачу
+            </Button>
+          </div>
 
-        <p className="form-label">Сортировка</p>
-        <div className="chip-row">
-          {SORT_OPTIONS.map((sortOption) => (
+          <p className="feed-inline-hint">{filtersSummary}</p>
+
+          {filtersOpen ? (
+            <>
+              <div className="form-grid">
+                <Input
+                  header="Поиск"
+                  placeholder="Например: лендинг"
+                  value={filterDraft.q}
+                  onChange={(event) =>
+                    setFilterDraft((prev) => ({
+                      ...prev,
+                      q: event.target.value,
+                    }))
+                  }
+                />
+                <Input
+                  header="Категория"
+                  placeholder="frontend"
+                  value={filterDraft.category}
+                  onChange={(event) =>
+                    setFilterDraft((prev) => ({
+                      ...prev,
+                      category: event.target.value,
+                    }))
+                  }
+                />
+                <Input
+                  header="Бюджет от"
+                  type="number"
+                  value={filterDraft.budgetMin}
+                  onChange={(event) =>
+                    setFilterDraft((prev) => ({
+                      ...prev,
+                      budgetMin: event.target.value,
+                    }))
+                  }
+                />
+                <Input
+                  header="Бюджет до"
+                  type="number"
+                  value={filterDraft.budgetMax}
+                  onChange={(event) =>
+                    setFilterDraft((prev) => ({
+                      ...prev,
+                      budgetMax: event.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <p className="form-label">Статус</p>
+              <div className="chip-row">
+                {STATUS_OPTIONS.map((statusOption) => (
+                  <Button
+                    key={statusOption.value}
+                    size="s"
+                    mode={
+                      filterDraft.status === statusOption.value
+                        ? "filled"
+                        : "outline"
+                    }
+                    onClick={() =>
+                      setFilterDraft((prev) => ({
+                        ...prev,
+                        status: statusOption.value,
+                      }))
+                    }
+                  >
+                    {statusOption.label}
+                  </Button>
+                ))}
+              </div>
+
+              <p className="form-label">Сортировка</p>
+              <div className="chip-row">
+                {SORT_OPTIONS.map((sortOption) => (
+                  <Button
+                    key={sortOption.value}
+                    size="s"
+                    mode={
+                      filterDraft.sort === sortOption.value
+                        ? "filled"
+                        : "outline"
+                    }
+                    onClick={() =>
+                      setFilterDraft((prev) => ({
+                        ...prev,
+                        sort: sortOption.value,
+                      }))
+                    }
+                  >
+                    {sortOption.label}
+                  </Button>
+                ))}
+              </div>
+
+              <div className="row-actions row-actions-tight">
+                <Button size="m" mode="filled" onClick={handleApplyFilters}>
+                  Применить
+                </Button>
+                <Button size="m" mode="outline" onClick={handleResetFilters}>
+                  Сбросить
+                </Button>
+              </div>
+            </>
+          ) : null}
+        </Section>
+
+        <Section
+          header={`Задачи (${pagination.total})`}
+          footer={`Страница ${pagination.page}/${Math.max(pagination.totalPages, 1)}`}
+        >
+          {listLoading ? (
+            <Placeholder
+              header="Загрузка"
+              description="Получаем список задач..."
+            />
+          ) : listError ? (
+            <Placeholder header="Ошибка" description={listError} />
+          ) : tasks.length === 0 ? (
+            <Placeholder
+              header="Пока пусто"
+              description="По текущим фильтрам задач не найдено"
+            />
+          ) : (
+            <List>
+              {tasks.map((task) => (
+                <Cell
+                  key={task.id}
+                  subtitle={`${task.category} • ${getStatusLabel(task.status)}`}
+                  description={`${trimText(task.description, 96)} • Дедлайн: ${formatDate(task.deadlineAt)}`}
+                  after={formatMoney(task.budget)}
+                  onClick={() => openTaskDetail(task.id)}
+                >
+                  {task.title}
+                </Cell>
+              ))}
+            </List>
+          )}
+
+          <div className="row-actions row-actions-tight">
             <Button
-              key={sortOption.value}
-              size="s"
-              mode={filterDraft.sort === sortOption.value ? "filled" : "outline"}
-              onClick={() =>
-                setFilterDraft((prev) => ({ ...prev, sort: sortOption.value }))
-              }
+              mode="outline"
+              size="m"
+              disabled={page <= 1 || listLoading}
+              onClick={() => setPage((prev) => prev - 1)}
             >
-              {sortOption.label}
+              Назад
             </Button>
-          ))}
-        </div>
-
-        <div className="row-actions">
-          <Button size="m" mode="filled" onClick={handleApplyFilters}>
-            Применить фильтры
-          </Button>
-          <Button size="m" mode="outline" onClick={handleResetFilters}>
-            Сбросить
-          </Button>
-          <Button size="m" mode="bezeled" onClick={() => navigate("/create")}>
-            Создать задачу
-          </Button>
-        </div>
-      </Section>
-
-      <Section
-        header={`Задачи (${pagination.total})`}
-        footer={`Страница ${pagination.page}/${Math.max(pagination.totalPages, 1)}`}
-      >
-        {listLoading ? (
-          <Placeholder header="Загрузка" description="Получаем список задач..." />
-        ) : listError ? (
-          <Placeholder header="Ошибка" description={listError} />
-        ) : tasks.length === 0 ? (
-          <Placeholder
-            header="Пока пусто"
-            description="По текущим фильтрам задач не найдено"
-          />
-        ) : (
-          <List>
-            {tasks.map((task) => (
-              <Cell
-                key={task.id}
-                subtitle={`${task.category} • ${getStatusLabel(task.status)}`}
-                description={`${trimText(task.description)} • Дедлайн: ${formatDate(task.deadlineAt)}`}
-                after={formatMoney(task.budget)}
-                onClick={() => openTaskDetail(task.id)}
-              >
-                {task.title}
-              </Cell>
-            ))}
-          </List>
-        )}
-
-        <div className="row-actions">
-          <Button
-            mode="outline"
-            size="m"
-            disabled={page <= 1 || listLoading}
-            onClick={() => setPage((prev) => prev - 1)}
-          >
-            Назад
-          </Button>
-          <Button
-            mode="outline"
-            size="m"
-            disabled={
-              listLoading || page >= pagination.totalPages || pagination.totalPages === 0
-            }
-            onClick={() => setPage((prev) => prev + 1)}
-          >
-            Вперед
-          </Button>
-        </div>
-      </Section>
-    </>
-  );
+            <Button
+              mode="outline"
+              size="m"
+              disabled={
+                listLoading ||
+                page >= pagination.totalPages ||
+                pagination.totalPages === 0
+              }
+              onClick={() => setPage((prev) => prev + 1)}
+            >
+              Вперед
+            </Button>
+          </div>
+        </Section>
+      </>
+    );
+  };
 
   const renderCreateTask = (): JSX.Element => (
     <Section
@@ -1232,7 +1318,10 @@ function App() {
           placeholder="Что нужно сделать"
           value={createForm.description}
           onChange={(event) =>
-            setCreateForm((prev) => ({ ...prev, description: event.target.value }))
+            setCreateForm((prev) => ({
+              ...prev,
+              description: event.target.value,
+            }))
           }
         />
         <Input
@@ -1257,7 +1346,10 @@ function App() {
           type="datetime-local"
           value={createForm.deadlineAt}
           onChange={(event) =>
-            setCreateForm((prev) => ({ ...prev, deadlineAt: event.target.value }))
+            setCreateForm((prev) => ({
+              ...prev,
+              deadlineAt: event.target.value,
+            }))
           }
         />
         <Input
@@ -1283,7 +1375,7 @@ function App() {
         >
           {createPending ? "Публикуем..." : "Опубликовать задачу"}
         </Button>
-        <Button mode="outline" size="l" onClick={() => navigate("/feed") }>
+        <Button mode="outline" size="l" onClick={() => navigate("/feed")}>
           Назад к ленте
         </Button>
       </div>
@@ -1334,12 +1426,16 @@ function App() {
                     <Button
                       mode="filled"
                       size="s"
-                      disabled={!canSelectExecutor || selectPendingId === proposal.id}
+                      disabled={
+                        !canSelectExecutor || selectPendingId === proposal.id
+                      }
                       onClick={() => {
                         void handleSelectProposal(proposal.id);
                       }}
                     >
-                      {selectPendingId === proposal.id ? "Выбираем..." : "Выбрать"}
+                      {selectPendingId === proposal.id
+                        ? "Выбираем..."
+                        : "Выбрать"}
                     </Button>
                   </div>
                 </div>
@@ -1391,14 +1487,19 @@ function App() {
           />
         )}
 
-        {!isDetailOwner && canManageOwnProposal && (!ownProposal || proposalEditMode) ? (
+        {!isDetailOwner &&
+        canManageOwnProposal &&
+        (!ownProposal || proposalEditMode) ? (
           <div className="form-grid proposal-form">
             <Input
               header="Цена"
               type="number"
               value={proposalForm.price}
               onChange={(event) =>
-                setProposalForm((prev) => ({ ...prev, price: event.target.value }))
+                setProposalForm((prev) => ({
+                  ...prev,
+                  price: event.target.value,
+                }))
               }
             />
             <Input
@@ -1406,18 +1507,26 @@ function App() {
               type="number"
               value={proposalForm.etaDays}
               onChange={(event) =>
-                setProposalForm((prev) => ({ ...prev, etaDays: event.target.value }))
+                setProposalForm((prev) => ({
+                  ...prev,
+                  etaDays: event.target.value,
+                }))
               }
             />
             <Textarea
               header="Комментарий"
               value={proposalForm.comment}
               onChange={(event) =>
-                setProposalForm((prev) => ({ ...prev, comment: event.target.value }))
+                setProposalForm((prev) => ({
+                  ...prev,
+                  comment: event.target.value,
+                }))
               }
             />
 
-            {proposalError ? <p className="error-text">{proposalError}</p> : null}
+            {proposalError ? (
+              <p className="error-text">{proposalError}</p>
+            ) : null}
 
             <div className="row-actions">
               <Button
@@ -1458,7 +1567,10 @@ function App() {
     if (detailLoading) {
       return (
         <Section>
-          <Placeholder header="Загрузка" description="Получаем карточку задачи..." />
+          <Placeholder
+            header="Загрузка"
+            description="Получаем карточку задачи..."
+          />
         </Section>
       );
     }
@@ -1499,7 +1611,10 @@ function App() {
             <Cell subtitle="Бюджет" after={formatMoney(detailTask.budget)}>
               Стоимость
             </Cell>
-            <Cell subtitle="Теги" description={detailTask.tags.join(", ") || "-"}>
+            <Cell
+              subtitle="Теги"
+              description={detailTask.tags.join(", ") || "-"}
+            >
               Теги
             </Cell>
             <Cell subtitle="Описание" description={detailTask.description}>
@@ -1508,11 +1623,14 @@ function App() {
           </List>
 
           <div className="row-actions">
-            <Button mode="outline" onClick={() => navigate("/feed") }>
+            <Button mode="outline" onClick={() => navigate("/feed")}>
               К ленте
             </Button>
             {canEdit ? (
-              <Button mode="bezeled" onClick={() => setEditMode((prev) => !prev)}>
+              <Button
+                mode="bezeled"
+                onClick={() => setEditMode((prev) => !prev)}
+              >
                 {editMode ? "Скрыть редактирование" : "Редактировать"}
               </Button>
             ) : null}
@@ -1534,7 +1652,10 @@ function App() {
                 header="Заголовок"
                 value={editForm.title}
                 onChange={(event) =>
-                  setEditForm((prev) => ({ ...prev, title: event.target.value }))
+                  setEditForm((prev) => ({
+                    ...prev,
+                    title: event.target.value,
+                  }))
                 }
               />
               <Textarea
@@ -1552,14 +1673,20 @@ function App() {
                 type="number"
                 value={editForm.budget}
                 onChange={(event) =>
-                  setEditForm((prev) => ({ ...prev, budget: event.target.value }))
+                  setEditForm((prev) => ({
+                    ...prev,
+                    budget: event.target.value,
+                  }))
                 }
               />
               <Input
                 header="Категория"
                 value={editForm.category}
                 onChange={(event) =>
-                  setEditForm((prev) => ({ ...prev, category: event.target.value }))
+                  setEditForm((prev) => ({
+                    ...prev,
+                    category: event.target.value,
+                  }))
                 }
               />
               <Input
@@ -1638,7 +1765,10 @@ function App() {
   const authGate = renderAuthGate();
 
   return (
-    <AppRoot appearance={webAppState.appearance} platform={webAppState.uiPlatform}>
+    <AppRoot
+      appearance={webAppState.appearance}
+      platform={webAppState.uiPlatform}
+    >
       <main className="app-shell">
         <Section>
           <div className="app-head">
@@ -1646,7 +1776,9 @@ function App() {
             <div>
               <p className="app-title">TG Freelance</p>
               <p className="app-subtitle">
-                {authUser ? `Вы вошли как ${authUser.displayName}` : "Подключение аккаунта..."}
+                {authUser
+                  ? `Вы вошли как ${authUser.displayName}`
+                  : "Подключение аккаунта..."}
               </p>
             </div>
           </div>
