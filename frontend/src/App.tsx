@@ -290,6 +290,30 @@ const getAcronym = (user?: TgUser): string => {
   return `${first}${second}`.toUpperCase();
 };
 
+const getDisplayAcronym = (
+  displayName: string,
+  username?: string | null,
+): string => {
+  const parts = displayName
+    .trim()
+    .split(/\s+/)
+    .filter((part) => part.length > 0);
+
+  if (parts.length >= 2) {
+    return `${parts[0][0] ?? "T"}${parts[1][0] ?? "G"}`.toUpperCase();
+  }
+
+  if (parts.length === 1 && parts[0].length >= 2) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  if (username && username.length >= 2) {
+    return username.slice(0, 2).toUpperCase();
+  }
+
+  return "TG";
+};
+
 const getStatusLabel = (status: TaskStatusValue): string =>
   STATUS_OPTIONS.find((item) => item.value === status)?.label ?? status;
 
@@ -509,7 +533,9 @@ function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const taskMatch = useMatch("/task/:taskId");
+  const userMatch = useMatch("/user/:userId");
   const detailTaskId = taskMatch?.params.taskId ?? null;
+  const profileUserId = userMatch?.params.userId ?? null;
 
   const [token, setToken] = useState<string | null>(() => {
     if (typeof window === "undefined") {
@@ -565,6 +591,14 @@ function App() {
   const [editPending, setEditPending] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<TaskForm>(DEFAULT_TASK_FORM);
+
+  const [publicProfileUser, setPublicProfileUser] = useState<PublicUser | null>(
+    null,
+  );
+  const [publicProfileLoading, setPublicProfileLoading] = useState(false);
+  const [publicProfileError, setPublicProfileError] = useState<string | null>(
+    null,
+  );
 
   const [proposals, setProposals] = useState<ProposalItem[]>([]);
   const [proposalsLoading, setProposalsLoading] = useState(false);
@@ -919,6 +953,12 @@ function App() {
   }, [detailTaskId]);
 
   useEffect(() => {
+    setPublicProfileUser(null);
+    setPublicProfileError(null);
+    setPublicProfileLoading(false);
+  }, [profileUserId]);
+
+  useEffect(() => {
     if (!token || !detailTaskId) {
       return;
     }
@@ -1036,6 +1076,53 @@ function App() {
     };
   }, [token, detailTaskId]);
 
+  useEffect(() => {
+    if (!token || !profileUserId) {
+      return;
+    }
+
+    let active = true;
+
+    const loadPublicProfile = async (): Promise<void> => {
+      try {
+        setPublicProfileLoading(true);
+        setPublicProfileError(null);
+
+        const response = await apiRequest<{ user: PublicUser }>(
+          `/profile/${profileUserId}`,
+          {},
+          token,
+        );
+
+        if (!active) {
+          return;
+        }
+
+        setPublicProfileUser(response.user);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setPublicProfileError(
+          error instanceof Error
+            ? error.message
+            : "Не удалось загрузить профиль пользователя",
+        );
+      } finally {
+        if (active) {
+          setPublicProfileLoading(false);
+        }
+      }
+    };
+
+    void loadPublicProfile();
+
+    return () => {
+      active = false;
+    };
+  }, [profileUserId, token]);
+
   const switchTab = (tab: TabState): void => {
     if (tab === "list") {
       navigate("/feed");
@@ -1066,6 +1153,10 @@ function App() {
 
   const openTaskDetail = (taskId: string): void => {
     navigate(`/task/${taskId}`);
+  };
+
+  const openUserProfile = (userId: string): void => {
+    navigate(`/user/${userId}`);
   };
 
   const handleCreateTask = async (): Promise<void> => {
@@ -1755,6 +1846,103 @@ function App() {
     );
   };
 
+  const renderPublicProfile = (): JSX.Element => {
+    if (publicProfileLoading) {
+      return (
+        <Section>
+          <Placeholder
+            header="Загрузка"
+            description="Получаем публичный профиль..."
+          />
+        </Section>
+      );
+    }
+
+    if (publicProfileError) {
+      return (
+        <Section>
+          <Placeholder header="Ошибка" description={publicProfileError} />
+        </Section>
+      );
+    }
+
+    if (!publicProfileUser) {
+      return (
+        <Section>
+          <Placeholder
+            header="Профиль не найден"
+            description="Проверь ссылку или вернись к ленте."
+          />
+        </Section>
+      );
+    }
+
+    const publicProfile = publicProfileUser.profile;
+    const publicAcronym = getDisplayAcronym(
+      publicProfileUser.displayName,
+      publicProfileUser.username,
+    );
+
+    return (
+      <>
+        <Section
+          header="Публичный профиль"
+          footer="Эти данные видят другие пользователи при выборе исполнителя и работе по задаче."
+        >
+          <List>
+            <Cell
+              before={<Avatar size={48} acronym={publicAcronym} />}
+              subtitle={
+                publicProfileUser.username
+                  ? `@${publicProfileUser.username}`
+                  : "без username"
+              }
+              description={`Приоритет: ${toRoleLabel(publicProfileUser.primaryRole)}`}
+            >
+              {publicProfileUser.displayName}
+            </Cell>
+            <Cell
+              subtitle="О себе"
+              description={publicProfile?.about ?? "Не заполнено"}
+            >
+              Описание
+            </Cell>
+            <Cell
+              subtitle="Навыки"
+              description={
+                publicProfile && publicProfile.skills.length > 0
+                  ? publicProfile.skills.join(", ")
+                  : "Не указаны"
+              }
+            >
+              Компетенции
+            </Cell>
+            <Cell subtitle="Рейтинг" after={String(publicProfile?.rating ?? 0)}>
+              Репутация
+            </Cell>
+            <Cell
+              subtitle="Завершено задач"
+              after={String(publicProfile?.completedTasksCount ?? 0)}
+            >
+              Статистика
+            </Cell>
+          </List>
+        </Section>
+
+        <Section>
+          <div className="row-actions row-actions-tight">
+            <Button mode="outline" onClick={() => navigate(-1)}>
+              Назад
+            </Button>
+            <Button mode="bezeled" onClick={() => navigate("/feed")}>
+              К ленте
+            </Button>
+          </div>
+        </Section>
+      </>
+    );
+  };
+
   const renderTasksList = (): JSX.Element => {
     const activeFiltersCount = [
       filterApplied.q.trim(),
@@ -2104,33 +2292,48 @@ function App() {
             />
           ) : (
             <div className="proposal-list">
-              {proposals.map((proposal) => (
-                <div key={proposal.id} className="proposal-card">
-                  <p className="proposal-title">
-                    {proposal.executor?.displayName ?? "Исполнитель"}
-                  </p>
-                  <p className="proposal-meta">
-                    {formatMoney(proposal.price)} • {proposal.etaDays} дн.
-                  </p>
-                  <p className="proposal-comment">{proposal.comment}</p>
-                  <div className="proposal-actions">
-                    <Button
-                      mode="filled"
-                      size="s"
-                      disabled={
-                        !canSelectExecutor || selectPendingId === proposal.id
-                      }
-                      onClick={() => {
-                        void handleSelectProposal(proposal.id);
-                      }}
-                    >
-                      {selectPendingId === proposal.id
-                        ? "Выбираем..."
-                        : "Выбрать"}
-                    </Button>
+              {proposals.map((proposal) => {
+                const executorId = proposal.executor?.id ?? null;
+
+                return (
+                  <div key={proposal.id} className="proposal-card">
+                    <p className="proposal-title">
+                      {proposal.executor?.displayName ?? "Исполнитель"}
+                    </p>
+                    <p className="proposal-meta">
+                      {formatMoney(proposal.price)} • {proposal.etaDays} дн.
+                    </p>
+                    <p className="proposal-comment">{proposal.comment}</p>
+                    <div className="proposal-actions">
+                      {executorId ? (
+                        <Button
+                          mode="outline"
+                          size="s"
+                          onClick={() => {
+                            openUserProfile(executorId);
+                          }}
+                        >
+                          Профиль
+                        </Button>
+                      ) : null}
+                      <Button
+                        mode="filled"
+                        size="s"
+                        disabled={
+                          !canSelectExecutor || selectPendingId === proposal.id
+                        }
+                        onClick={() => {
+                          void handleSelectProposal(proposal.id);
+                        }}
+                      >
+                        {selectPendingId === proposal.id
+                          ? "Выбираем..."
+                          : "Выбрать"}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )
         ) : ownProposal ? (
@@ -2292,6 +2495,7 @@ function App() {
       isAssignedExecutor && detailTask.status === "IN_PROGRESS";
     const canApproveOrReject =
       isDetailOwner && detailTask.status === "ON_REVIEW";
+    const detailCustomer = detailTask.customer;
 
     return (
       <>
@@ -2305,6 +2509,24 @@ function App() {
             <Cell subtitle="Статус" after={getStatusLabel(detailTask.status)}>
               Статус задачи
             </Cell>
+            {detailCustomer ? (
+              <Cell
+                subtitle="Заказчик"
+                description={
+                  detailCustomer.username
+                    ? `@${detailCustomer.username}`
+                    : "без username"
+                }
+                after="Открыть"
+                onClick={() => openUserProfile(detailCustomer.id)}
+              >
+                {detailCustomer.displayName}
+              </Cell>
+            ) : (
+              <Cell subtitle="Заказчик" description="Профиль недоступен">
+                Профиль заказчика
+              </Cell>
+            )}
             <Cell subtitle="Категория" after={detailTask.category}>
               Категория
             </Cell>
@@ -2617,6 +2839,7 @@ function App() {
               <Route path="/feed" element={renderTasksList()} />
               <Route path="/create" element={renderCreateTask()} />
               <Route path="/task/:taskId" element={renderDetailTask()} />
+              <Route path="/user/:userId" element={renderPublicProfile()} />
               <Route path="/account" element={renderProfile()} />
               <Route
                 path="*"
