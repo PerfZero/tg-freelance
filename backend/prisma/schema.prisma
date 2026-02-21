@@ -61,6 +61,7 @@ model Profile {
   portfolioLinks      String[] @default([]) @map("portfolio_links")
   basePrice           Decimal? @db.Decimal(12, 2) @map("base_price")
   experienceLevel     ExperienceLevel? @map("experience_level")
+  botNotificationsEnabled Boolean @default(true) @map("bot_notifications_enabled")
   primaryRole         ProfilePrimaryRole? @map("primary_role")
   telegramAvatarUrl   String?  @map("telegram_avatar_url")
   customAvatarDataUrl String?  @map("custom_avatar_data_url")

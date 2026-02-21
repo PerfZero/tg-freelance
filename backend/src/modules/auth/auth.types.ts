@@ -12,6 +12,7 @@ export type PublicProfile = {
   portfolioLinks: string[];
   basePrice: number | null;
   experienceLevel: ExperienceLevelValue | null;
+  botNotificationsEnabled: boolean;
   avatarUrl: string | null;
   hasCustomAvatar: boolean;
   rating: number;

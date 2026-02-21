@@ -20,6 +20,7 @@ API поднимается на `http://localhost:3001` (или порт из `P
 - `TASK_CREATE_RATE_LIMIT_PER_WINDOW` (по умолчанию `5`)
 - `PROPOSAL_CREATE_RATE_LIMIT_PER_WINDOW` (по умолчанию `20`)
 - `ADMIN_TELEGRAM_IDS` (через запятую, например `123,456`)
+- `TELEGRAM_BOT_USERNAME` (без `@`, для deep link в бот-уведомлениях)
 
 ## Команды
 
@@ -53,6 +54,12 @@ npm run prisma:studio
     - `display_name: string`
     - `about: string | null`
     - `skills: string[]`
+    - `portfolio_links: string[]`
+    - `base_price: number | null`
+    - `experience_level: "JUNIOR" | "MIDDLE" | "SENIOR" | null`
+    - `bot_notifications_enabled: boolean`
+    - `custom_avatar_data_url: string | null`
+    - `primary_role: "CUSTOMER" | "EXECUTOR" | null`
   - результат: обновленный пользователь
 - `GET /profile/:userId`:
   - header: `Authorization: Bearer <token>`

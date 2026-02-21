@@ -24,6 +24,7 @@ export const env = {
   port: toInt(process.env.PORT, 3001),
   databaseUrl: process.env.DATABASE_URL ?? "",
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
+  telegramBotUsername: process.env.TELEGRAM_BOT_USERNAME ?? "",
   jwtSecret: process.env.JWT_SECRET ?? "",
   taskCreateRateLimitPerWindow: toInt(
     process.env.TASK_CREATE_RATE_LIMIT_PER_WINDOW,

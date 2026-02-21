@@ -14,6 +14,7 @@ type ProfilePatchPayload = {
   portfolio_links?: unknown;
   base_price?: unknown;
   experience_level?: unknown;
+  bot_notifications_enabled?: unknown;
   primary_role?: unknown;
   custom_avatar_data_url?: unknown;
 };
@@ -237,6 +238,24 @@ const parseExperienceLevel = (
   };
 };
 
+const parseBotNotificationsEnabled = (
+  value: unknown,
+): { provided: boolean; normalized?: boolean } => {
+  if (value === undefined) {
+    return { provided: false };
+  }
+
+  assertValidation(
+    typeof value === "boolean",
+    "bot_notifications_enabled must be a boolean",
+  );
+
+  return {
+    provided: true,
+    normalized: value as boolean,
+  };
+};
+
 const parsePrimaryRole = (
   value: unknown,
 ): { provided: boolean; normalized?: PrimaryRoleValue | null } => {
@@ -326,6 +345,9 @@ const patchProfile = async (
   const parsedPortfolioLinks = parsePortfolioLinks(payload.portfolio_links);
   const parsedBasePrice = parseBasePrice(payload.base_price);
   const parsedExperienceLevel = parseExperienceLevel(payload.experience_level);
+  const parsedBotNotificationsEnabled = parseBotNotificationsEnabled(
+    payload.bot_notifications_enabled,
+  );
   const parsedPrimaryRole = parsePrimaryRole(payload.primary_role);
   const parsedCustomAvatarDataUrl = parseCustomAvatarDataUrl(
     payload.custom_avatar_data_url,
@@ -338,6 +360,7 @@ const patchProfile = async (
     parsedPortfolioLinks.provided ||
     parsedBasePrice.provided ||
     parsedExperienceLevel.provided ||
+    parsedBotNotificationsEnabled.provided ||
     parsedPrimaryRole.provided ||
     parsedCustomAvatarDataUrl.provided;
 
@@ -358,6 +381,7 @@ const patchProfile = async (
     parsedPortfolioLinks.provided ||
     parsedBasePrice.provided ||
     parsedExperienceLevel.provided ||
+    parsedBotNotificationsEnabled.provided ||
     parsedPrimaryRole.provided ||
     parsedCustomAvatarDataUrl.provided
   ) {
@@ -374,6 +398,11 @@ const patchProfile = async (
           : {}),
         ...(parsedExperienceLevel.provided
           ? { experienceLevel: parsedExperienceLevel.normalized }
+          : {}),
+        ...(parsedBotNotificationsEnabled.provided
+          ? {
+              botNotificationsEnabled: parsedBotNotificationsEnabled.normalized,
+            }
           : {}),
         ...(parsedPrimaryRole.provided
           ? { primaryRole: parsedPrimaryRole.normalized }
@@ -393,6 +422,9 @@ const patchProfile = async (
         experienceLevel: parsedExperienceLevel.provided
           ? parsedExperienceLevel.normalized
           : null,
+        botNotificationsEnabled: parsedBotNotificationsEnabled.provided
+          ? parsedBotNotificationsEnabled.normalized
+          : true,
         primaryRole: parsedPrimaryRole.provided
           ? parsedPrimaryRole.normalized
           : null,

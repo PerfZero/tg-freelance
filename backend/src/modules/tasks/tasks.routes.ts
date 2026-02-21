@@ -8,7 +8,10 @@ import { assertBodyIsObject, assertValidation } from "../../common/validation";
 import { env } from "../../config/env";
 import { prisma } from "../../config/prisma";
 import { getAuthUser, requireAuth } from "../auth/auth.middleware";
-import { createNotification } from "../notifications/notifications.service";
+import {
+  createNotification,
+  sendTaskBotNotification,
+} from "../notifications/notifications.service";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -857,6 +860,14 @@ tasksRouter.post(
         });
       }
 
+      void sendTaskBotNotification({
+        userId: task.customerId,
+        type: NotificationType.PROPOSAL_CREATED,
+        title: "Новый отклик",
+        body: `По задаче "${task.title}" пришел новый отклик.`,
+        taskId,
+      });
+
       res.status(201).json({
         proposal: mapProposal(proposal),
       });
@@ -1042,6 +1053,16 @@ tasksRouter.post(
         throw error;
       }
 
+      if (updatedTask.assignment?.executorId) {
+        void sendTaskBotNotification({
+          userId: updatedTask.assignment.executorId,
+          type: NotificationType.EXECUTOR_SELECTED,
+          title: "Вас выбрали исполнителем",
+          body: `Заказчик выбрал вас исполнителем по задаче "${updatedTask.title}".`,
+          taskId,
+        });
+      }
+
       res.status(200).json({
         task: mapTask(updatedTask),
       });
@@ -1111,6 +1132,14 @@ tasksRouter.post("/:id/send-to-review", requireAuth, async (req, res, next) => {
       });
     });
 
+    void sendTaskBotNotification({
+      userId: task.customerId,
+      type: NotificationType.TASK_SENT_TO_REVIEW,
+      title: "Задача отправлена на проверку",
+      body: `Исполнитель отправил задачу "${task.title}" на проверку.`,
+      taskId,
+    });
+
     res.status(200).json({
       task: mapTask(task),
     });
@@ -1177,6 +1206,16 @@ tasksRouter.post("/:id/approve", requireAuth, async (req, res, next) => {
         changedBy: authUser.id,
       });
     });
+
+    if (task.assignment?.executorId) {
+      void sendTaskBotNotification({
+        userId: task.assignment.executorId,
+        type: NotificationType.TASK_APPROVED,
+        title: "Задача подтверждена",
+        body: `Заказчик подтвердил выполнение задачи "${task.title}".`,
+        taskId,
+      });
+    }
 
     res.status(200).json({
       task: mapTask(task),
@@ -1251,6 +1290,16 @@ tasksRouter.post("/:id/reject-review", requireAuth, async (req, res, next) => {
         comment: payload.comment,
       });
     });
+
+    if (task.assignment?.executorId) {
+      void sendTaskBotNotification({
+        userId: task.assignment.executorId,
+        type: NotificationType.TASK_REJECTED,
+        title: "Задача возвращена в работу",
+        body: `Заказчик вернул задачу "${task.title}" в работу.`,
+        taskId,
+      });
+    }
 
     res.status(200).json({
       task: mapTask(task),

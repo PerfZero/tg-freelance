@@ -76,6 +76,7 @@ type PublicUser = {
     portfolioLinks: string[];
     basePrice: number | null;
     experienceLevel: ExperienceLevelValue | null;
+    botNotificationsEnabled: boolean;
     avatarUrl: string | null;
     hasCustomAvatar: boolean;
     rating: number;
@@ -701,6 +702,10 @@ function App() {
   const [executorProfileError, setExecutorProfileError] = useState<
     string | null
   >(null);
+  const [botNotificationsPending, setBotNotificationsPending] = useState(false);
+  const [botNotificationsError, setBotNotificationsError] = useState<
+    string | null
+  >(null);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   const [filterDraft, setFilterDraft] = useState<TaskFilters>(DEFAULT_FILTERS);
@@ -1046,6 +1051,7 @@ function App() {
   useEffect(() => {
     setExecutorProfileForm(toExecutorProfileForm(authUser?.profile ?? null));
     setExecutorProfileError(null);
+    setBotNotificationsError(null);
   }, [authUser]);
 
   useEffect(() => {
@@ -1816,6 +1822,38 @@ function App() {
     }
   };
 
+  const handleSetBotNotifications = async (enabled: boolean): Promise<void> => {
+    if (!token) {
+      return;
+    }
+
+    try {
+      setBotNotificationsPending(true);
+      setBotNotificationsError(null);
+
+      const response = await apiRequest<{ user: PublicUser }>(
+        "/profile/me",
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            bot_notifications_enabled: enabled,
+          }),
+        },
+        token,
+      );
+
+      setAuthUser(response.user);
+    } catch (error) {
+      setBotNotificationsError(
+        error instanceof Error
+          ? error.message
+          : "Не удалось обновить настройку уведомлений бота",
+      );
+    } finally {
+      setBotNotificationsPending(false);
+    }
+  };
+
   const saveCustomAvatar = async (dataUrl: string | null): Promise<void> => {
     if (!token) {
       return;
@@ -2225,6 +2263,53 @@ function App() {
               {executorProfilePending ? "Сохраняем..." : "Сохранить профиль"}
             </Button>
           </div>
+        </Section>
+
+        <Section
+          header="Уведомления в боте"
+          footer="Критичные события по задачам будут дублироваться сообщением в Telegram-боте."
+        >
+          <Cell
+            subtitle="Текущий режим"
+            after={
+              authUser.profile?.botNotificationsEnabled
+                ? "Включены"
+                : "Выключены"
+            }
+          >
+            Дублировать события в бота
+          </Cell>
+
+          <div className="row-actions row-actions-tight">
+            <Button
+              mode={
+                authUser.profile?.botNotificationsEnabled ? "filled" : "outline"
+              }
+              size="m"
+              disabled={botNotificationsPending}
+              onClick={() => {
+                void handleSetBotNotifications(true);
+              }}
+            >
+              Включить
+            </Button>
+            <Button
+              mode={
+                authUser.profile?.botNotificationsEnabled ? "outline" : "filled"
+              }
+              size="m"
+              disabled={botNotificationsPending}
+              onClick={() => {
+                void handleSetBotNotifications(false);
+              }}
+            >
+              Выключить
+            </Button>
+          </div>
+
+          {botNotificationsError ? (
+            <p className="error-text">{botNotificationsError}</p>
+          ) : null}
         </Section>
 
         <Section

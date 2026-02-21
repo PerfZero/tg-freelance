@@ -24,6 +24,7 @@ export const mapPublicUser = (user: UserWithProfile): PublicUser => ({
           ? Number(user.profile.basePrice.toString())
           : null,
         experienceLevel: user.profile.experienceLevel,
+        botNotificationsEnabled: user.profile.botNotificationsEnabled,
         avatarUrl: resolveAvatarUrl(
           user.profile.customAvatarDataUrl,
           user.profile.telegramAvatarUrl,
