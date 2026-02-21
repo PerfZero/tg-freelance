@@ -50,6 +50,7 @@ model User {
   executorAssignments Assignment[]        @relation("ExecutorAssignments")
   changedTaskStatuses TaskStatusHistory[] @relation("ChangedTaskStatuses")
   notifications       Notification[]      @relation("UserNotifications")
+  taskMessages        TaskMessage[]       @relation("TaskMessages")
 
   @@map("users")
 }
@@ -88,6 +89,7 @@ model Task {
   proposals            Proposal[]
   assignment           Assignment?
   statusHistoryEntries TaskStatusHistory[]
+  messages             TaskMessage[]
 
   @@index([customerId])
   @@index([status])
@@ -161,4 +163,18 @@ model Notification {
   @@index([userId, createdAt])
   @@index([userId, isRead])
   @@map("notifications")
+}
+
+model TaskMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  taskId     String   @map("task_id") @db.Uuid
+  senderId   String   @map("sender_id") @db.Uuid
+  text       String
+  createdAt  DateTime @default(now()) @map("created_at")
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  sender     User     @relation("TaskMessages", fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, createdAt])
+  @@index([senderId])
+  @@map("task_messages")
 }

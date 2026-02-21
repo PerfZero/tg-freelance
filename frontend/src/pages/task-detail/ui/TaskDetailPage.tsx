@@ -1,17 +1,36 @@
+import type { TaskMessageItem } from "../../../entities/chat/model/types";
 import { Home } from "lucide-react";
 
-import type { ProposalForm, ProposalItem } from "../../../entities/proposal/model/types";
+import type {
+  ProposalForm,
+  ProposalItem,
+} from "../../../entities/proposal/model/types";
 import type {
   TaskForm,
   TaskItem,
   TaskStatusHistoryItem,
 } from "../../../entities/task/model/types";
 import type { PublicUser } from "../../../entities/user/model/types";
-import { formatDate, formatMoney, formatRating, trimText } from "../../../shared/lib/format";
+import {
+  formatDate,
+  formatMoney,
+  formatRating,
+  trimText,
+} from "../../../shared/lib/format";
 import { getExperienceLevelLabel } from "../../../shared/lib/profile";
-import { getStatusLabel, shouldClampTaskDescription } from "../../../shared/lib/task";
+import {
+  getStatusLabel,
+  shouldClampTaskDescription,
+} from "../../../shared/lib/task";
 import { getDisplayAcronym } from "../../../shared/lib/telegram";
-import { Avatar, Button, Input, Placeholder, Section, Textarea } from "../../../shared/ui";
+import {
+  Avatar,
+  Button,
+  Input,
+  Placeholder,
+  Section,
+  Textarea,
+} from "../../../shared/ui";
 
 type ExecutorProfileCheck = { isComplete: boolean; missing: string[] };
 
@@ -101,7 +120,8 @@ const TaskProposalsSection = ({
                 executorProfile && executorProfile.skills.length > 0
                   ? executorProfile.skills.slice(0, 5)
                   : [];
-              const portfolioPreview = executorProfile?.portfolioLinks?.[0] ?? null;
+              const portfolioPreview =
+                executorProfile?.portfolioLinks?.[0] ?? null;
 
               return (
                 <div key={proposal.id} className="proposal-card">
@@ -116,7 +136,8 @@ const TaskProposalsSection = ({
                         {proposal.executor?.displayName ?? "Исполнитель"}
                       </p>
                       <p className="proposal-mini-meta">
-                        Рейтинг: {formatRating(executorProfile?.rating ?? 0)} • Опыт:{" "}
+                        Рейтинг: {formatRating(executorProfile?.rating ?? 0)} •
+                        Опыт:{" "}
                         {getExperienceLevelLabel(
                           executorProfile?.experienceLevel ?? null,
                         )}{" "}
@@ -137,7 +158,10 @@ const TaskProposalsSection = ({
                   {skillPreview.length > 0 ? (
                     <div className="proposal-skill-row">
                       {skillPreview.map((skill) => (
-                        <span key={`${proposal.id}-${skill}`} className="proposal-skill-chip">
+                        <span
+                          key={`${proposal.id}-${skill}`}
+                          className="proposal-skill-chip"
+                        >
                           {skill}
                         </span>
                       ))}
@@ -167,10 +191,14 @@ const TaskProposalsSection = ({
                     <Button
                       mode="filled"
                       size="s"
-                      disabled={!canSelectExecutor || selectPendingId === proposal.id}
+                      disabled={
+                        !canSelectExecutor || selectPendingId === proposal.id
+                      }
                       onClick={() => onSelectProposal(proposal.id)}
                     >
-                      {selectPendingId === proposal.id ? "Выбираем..." : "Выбрать"}
+                      {selectPendingId === proposal.id
+                        ? "Выбираем..."
+                        : "Выбрать"}
                     </Button>
                   </div>
                 </div>
@@ -191,7 +219,12 @@ const TaskProposalsSection = ({
               <Button mode="bezeled" size="m" onClick={onStartEditOwnProposal}>
                 {proposalEditMode ? "Скрыть форму" : "Изменить"}
               </Button>
-              <Button mode="plain" size="m" disabled={proposalPending} onClick={onDeleteOwnProposal}>
+              <Button
+                mode="plain"
+                size="m"
+                disabled={proposalPending}
+                onClick={onDeleteOwnProposal}
+              >
                 Удалить
               </Button>
             </div>
@@ -208,7 +241,10 @@ const TaskProposalsSection = ({
         />
       )}
 
-      {!isDetailOwner && canManageOwnProposal && !canCreateProposal && !ownProposal ? (
+      {!isDetailOwner &&
+      canManageOwnProposal &&
+      !canCreateProposal &&
+      !ownProposal ? (
         <div className="proposal-profile-gate">
           <p className="proposal-profile-gate-title">
             Чтобы откликаться, заполни профиль исполнителя:
@@ -237,18 +273,24 @@ const TaskProposalsSection = ({
             header="Цена"
             type="number"
             value={proposalForm.price}
-            onChange={(event) => onPatchProposalForm({ price: event.target.value })}
+            onChange={(event) =>
+              onPatchProposalForm({ price: event.target.value })
+            }
           />
           <Input
             header="Срок (дней)"
             type="number"
             value={proposalForm.etaDays}
-            onChange={(event) => onPatchProposalForm({ etaDays: event.target.value })}
+            onChange={(event) =>
+              onPatchProposalForm({ etaDays: event.target.value })
+            }
           />
           <Textarea
             header="Комментарий"
             value={proposalForm.comment}
-            onChange={(event) => onPatchProposalForm({ comment: event.target.value })}
+            onChange={(event) =>
+              onPatchProposalForm({ comment: event.target.value })
+            }
           />
 
           {proposalError ? <p className="error-text">{proposalError}</p> : null}
@@ -326,6 +368,13 @@ type TaskDetailPageProps = {
   onUpdateProposal: () => void;
   onCancelProposalEdit: () => void;
   onOpenExecutorProfileSetup: () => void;
+  taskMessages: TaskMessageItem[];
+  taskMessagesLoading: boolean;
+  taskMessagesError: string | null;
+  taskMessageDraft: string;
+  taskMessagePending: boolean;
+  onTaskMessageDraftChange: (value: string) => void;
+  onSendTaskMessage: () => void;
 };
 
 export const TaskDetailPage = ({
@@ -376,11 +425,21 @@ export const TaskDetailPage = ({
   onUpdateProposal,
   onCancelProposalEdit,
   onOpenExecutorProfileSetup,
+  taskMessages,
+  taskMessagesLoading,
+  taskMessagesError,
+  taskMessageDraft,
+  taskMessagePending,
+  onTaskMessageDraftChange,
+  onSendTaskMessage,
 }: TaskDetailPageProps): JSX.Element => {
   if (detailLoading) {
     return (
       <Section>
-        <Placeholder header="Загрузка" description="Получаем карточку задачи..." />
+        <Placeholder
+          header="Загрузка"
+          description="Получаем карточку задачи..."
+        />
       </Section>
     );
   }
@@ -403,12 +462,24 @@ export const TaskDetailPage = ({
 
   const canEdit = isDetailOwner && detailTask.status === "OPEN";
   const isAssignedExecutor = Boolean(
-    authUser && detailTask.assignment && detailTask.assignment.executorId === authUser.id,
+    authUser &&
+    detailTask.assignment &&
+    detailTask.assignment.executorId === authUser.id,
   );
-  const canSendToReview = isAssignedExecutor && detailTask.status === "IN_PROGRESS";
+  const canSendToReview =
+    isAssignedExecutor && detailTask.status === "IN_PROGRESS";
   const canApproveOrReject = isDetailOwner && detailTask.status === "ON_REVIEW";
   const detailCustomer = detailTask.customer;
-  const canClampDetailDescription = shouldClampTaskDescription(detailTask.description);
+  const canClampDetailDescription = shouldClampTaskDescription(
+    detailTask.description,
+  );
+  const hasAssignment = Boolean(detailTask.assignment);
+  const canUseTaskChat = Boolean(
+    authUser &&
+    detailTask.assignment &&
+    (authUser.id === detailTask.customerId ||
+      authUser.id === detailTask.assignment.executorId),
+  );
 
   return (
     <>
@@ -424,15 +495,22 @@ export const TaskDetailPage = ({
         </div>
 
         <div className="task-detail-meta-row">
-          <span className="task-feed-meta-chip">{getStatusLabel(detailTask.status)}</span>
-          <span className="task-feed-meta-chip">{formatDate(detailTask.deadlineAt)}</span>
+          <span className="task-feed-meta-chip">
+            {getStatusLabel(detailTask.status)}
+          </span>
+          <span className="task-feed-meta-chip">
+            {formatDate(detailTask.deadlineAt)}
+          </span>
           <span className="task-feed-meta-chip">{detailTask.category}</span>
         </div>
 
         {detailTask.tags.length > 0 ? (
           <div className="task-detail-meta-row">
             {detailTask.tags.map((tag) => (
-              <span key={`${detailTask.id}-${tag}`} className="task-feed-meta-chip">
+              <span
+                key={`${detailTask.id}-${tag}`}
+                className="task-feed-meta-chip"
+              >
                 #{tag}
               </span>
             ))}
@@ -441,8 +519,14 @@ export const TaskDetailPage = ({
 
         {detailCustomer ? (
           <div className="task-detail-customer-row">
-            <p className="task-detail-customer-text">Заказчик: {detailCustomer.displayName}</p>
-            <Button mode="outline" size="s" onClick={() => onOpenUserProfile(detailCustomer.id)}>
+            <p className="task-detail-customer-text">
+              Заказчик: {detailCustomer.displayName}
+            </p>
+            <Button
+              mode="outline"
+              size="s"
+              onClick={() => onOpenUserProfile(detailCustomer.id)}
+            >
               Профиль заказчика
             </Button>
           </div>
@@ -459,7 +543,11 @@ export const TaskDetailPage = ({
         </p>
         {canClampDetailDescription ? (
           <div className="task-feed-readmore-row">
-            <Button mode="outline" size="s" onClick={onToggleExpandedDetailDescription}>
+            <Button
+              mode="outline"
+              size="s"
+              onClick={onToggleExpandedDetailDescription}
+            >
               {expandedDetailDescription ? "Скрыть" : "Показать еще"}
             </Button>
           </div>
@@ -493,7 +581,12 @@ export const TaskDetailPage = ({
           footer="Статус задачи меняют только участники, которым это разрешено по роли."
         >
           {canSendToReview ? (
-            <Button mode="filled" size="m" disabled={statusActionPending} onClick={onSendToReview}>
+            <Button
+              mode="filled"
+              size="m"
+              disabled={statusActionPending}
+              onClick={onSendToReview}
+            >
               {statusActionPending ? "Отправляем..." : "Отправить на проверку"}
             </Button>
           ) : null}
@@ -501,10 +594,22 @@ export const TaskDetailPage = ({
           {canApproveOrReject ? (
             <>
               <div className="row-actions">
-                <Button mode="filled" size="m" disabled={statusActionPending} onClick={onApproveTask}>
-                  {statusActionPending ? "Подтверждаем..." : "Подтвердить выполнение"}
+                <Button
+                  mode="filled"
+                  size="m"
+                  disabled={statusActionPending}
+                  onClick={onApproveTask}
+                >
+                  {statusActionPending
+                    ? "Подтверждаем..."
+                    : "Подтвердить выполнение"}
                 </Button>
-                <Button mode="bezeled" size="m" disabled={statusActionPending} onClick={onToggleRejectReviewMode}>
+                <Button
+                  mode="bezeled"
+                  size="m"
+                  disabled={statusActionPending}
+                  onClick={onToggleRejectReviewMode}
+                >
                   {rejectReviewMode ? "Скрыть форму" : "Вернуть в работу"}
                 </Button>
               </div>
@@ -515,7 +620,9 @@ export const TaskDetailPage = ({
                     header="Комментарий для исполнителя"
                     placeholder="Например: нужно поправить мобильную верстку и форму отправки."
                     value={rejectReviewComment}
-                    onChange={(event) => onRejectReviewCommentChange(event.target.value)}
+                    onChange={(event) =>
+                      onRejectReviewCommentChange(event.target.value)
+                    }
                   />
                   <div className="row-actions row-actions-tight">
                     <Button
@@ -524,7 +631,9 @@ export const TaskDetailPage = ({
                       disabled={statusActionPending}
                       onClick={onRejectReview}
                     >
-                      {statusActionPending ? "Возвращаем..." : "Подтвердить возврат в работу"}
+                      {statusActionPending
+                        ? "Возвращаем..."
+                        : "Подтвердить возврат в работу"}
                     </Button>
                   </div>
                 </div>
@@ -532,11 +641,94 @@ export const TaskDetailPage = ({
             </>
           ) : null}
 
-          {statusActionError ? <p className="error-text">{statusActionError}</p> : null}
+          {statusActionError ? (
+            <p className="error-text">{statusActionError}</p>
+          ) : null}
         </Section>
       ) : null}
 
-      <Section header="История статусов" footer="Последние изменения показываются сверху.">
+      <Section
+        header="Чат по задаче"
+        footer="В чате можно обсуждать детали выполнения и правки по этой задаче."
+      >
+        {!hasAssignment ? (
+          <Placeholder
+            header="Чат пока закрыт"
+            description="Чат появится после того, как заказчик выберет исполнителя."
+          />
+        ) : !canUseTaskChat ? (
+          <Placeholder
+            header="Нет доступа"
+            description="Чат доступен только заказчику и выбранному исполнителю."
+          />
+        ) : (
+          <>
+            {taskMessagesLoading ? (
+              <Placeholder
+                header="Загрузка"
+                description="Получаем сообщения чата..."
+              />
+            ) : taskMessagesError ? (
+              <Placeholder header="Ошибка" description={taskMessagesError} />
+            ) : taskMessages.length === 0 ? (
+              <Placeholder
+                header="Пока сообщений нет"
+                description="Напиши первое сообщение по задаче."
+              />
+            ) : (
+              <div className="task-chat-list">
+                {taskMessages.map((message) => {
+                  const isOwnMessage = authUser?.id === message.senderId;
+
+                  return (
+                    <div
+                      key={message.id}
+                      className={`task-chat-message ${isOwnMessage ? "task-chat-message-own" : "task-chat-message-other"}`}
+                    >
+                      <p className="task-chat-author">
+                        {isOwnMessage ? "Вы" : message.sender.displayName}
+                      </p>
+                      <p className="task-chat-text">{message.text}</p>
+                      <p className="task-chat-meta">
+                        {formatDate(message.createdAt)}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="task-chat-form">
+              <Textarea
+                header="Сообщение"
+                placeholder="Напиши комментарий по задаче..."
+                value={taskMessageDraft}
+                onChange={(event) =>
+                  onTaskMessageDraftChange(event.target.value)
+                }
+                rows={3}
+              />
+              <div className="row-actions row-actions-tight">
+                <Button
+                  mode="filled"
+                  size="m"
+                  disabled={
+                    taskMessagePending || taskMessageDraft.trim().length === 0
+                  }
+                  onClick={onSendTaskMessage}
+                >
+                  {taskMessagePending ? "Отправляем..." : "Отправить"}
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </Section>
+
+      <Section
+        header="История статусов"
+        footer="Последние изменения показываются сверху."
+      >
         {statusHistoryLoading ? (
           <Placeholder header="Загрузка" description="Получаем историю..." />
         ) : statusHistoryError ? (
@@ -561,7 +753,9 @@ export const TaskDetailPage = ({
                   <p className="status-history-meta">
                     {formatDate(entry.createdAt)} • {actorLabel}
                   </p>
-                  {entry.comment ? <p className="status-history-comment">{entry.comment}</p> : null}
+                  {entry.comment ? (
+                    <p className="status-history-comment">{entry.comment}</p>
+                  ) : null}
                 </div>
               );
             })}
@@ -570,46 +764,65 @@ export const TaskDetailPage = ({
       </Section>
 
       {editMode ? (
-        <Section header="Редактирование" footer="Изменять можно только задачи в статусе «Открыта».">
+        <Section
+          header="Редактирование"
+          footer="Изменять можно только задачи в статусе «Открыта»."
+        >
           <div className="form-grid">
             <Input
               header="Заголовок"
               value={editForm.title}
-              onChange={(event) => onPatchEditForm({ title: event.target.value })}
+              onChange={(event) =>
+                onPatchEditForm({ title: event.target.value })
+              }
             />
             <Textarea
               header="Описание"
               value={editForm.description}
-              onChange={(event) => onPatchEditForm({ description: event.target.value })}
+              onChange={(event) =>
+                onPatchEditForm({ description: event.target.value })
+              }
             />
             <Input
               header="Бюджет"
               type="number"
               value={editForm.budget}
-              onChange={(event) => onPatchEditForm({ budget: event.target.value })}
+              onChange={(event) =>
+                onPatchEditForm({ budget: event.target.value })
+              }
             />
             <Input
               header="Категория"
               value={editForm.category}
-              onChange={(event) => onPatchEditForm({ category: event.target.value })}
+              onChange={(event) =>
+                onPatchEditForm({ category: event.target.value })
+              }
             />
             <Input
               header="Дедлайн"
               type="datetime-local"
               value={editForm.deadlineAt}
-              onChange={(event) => onPatchEditForm({ deadlineAt: event.target.value })}
+              onChange={(event) =>
+                onPatchEditForm({ deadlineAt: event.target.value })
+              }
             />
             <Input
               header="Теги"
               value={editForm.tags}
-              onChange={(event) => onPatchEditForm({ tags: event.target.value })}
+              onChange={(event) =>
+                onPatchEditForm({ tags: event.target.value })
+              }
             />
           </div>
 
           {editError ? <p className="error-text">{editError}</p> : null}
 
           <div className="row-actions">
-            <Button mode="filled" disabled={editPending} onClick={onSaveTaskEdits}>
+            <Button
+              mode="filled"
+              disabled={editPending}
+              onClick={onSaveTaskEdits}
+            >
               {editPending ? "Сохраняем..." : "Сохранить"}
             </Button>
             <Button mode="outline" onClick={onToggleEditMode}>

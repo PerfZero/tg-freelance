@@ -25,6 +25,9 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const MAX_PROPOSAL_COMMENT_LENGTH = 3000;
 const MAX_STATUS_COMMENT_LENGTH = 2000;
+const MAX_TASK_MESSAGE_LENGTH = 4000;
+const DEFAULT_CHAT_LIMIT = 100;
+const MAX_CHAT_LIMIT = 200;
 
 type TaskCreatePayload = {
   title?: unknown;
@@ -56,6 +59,10 @@ type TaskSelectProposalPayload = {
 
 type TaskRejectReviewPayload = {
   comment?: unknown;
+};
+
+type TaskMessageCreatePayload = {
+  text?: unknown;
 };
 
 const taskSelect = {
@@ -134,12 +141,30 @@ const statusHistorySelect = {
   },
 } satisfies Prisma.TaskStatusHistorySelect;
 
+const taskMessageSelect = {
+  id: true,
+  taskId: true,
+  senderId: true,
+  text: true,
+  createdAt: true,
+  sender: {
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+    },
+  },
+} satisfies Prisma.TaskMessageSelect;
+
 type TaskView = Prisma.TaskGetPayload<{ select: typeof taskSelect }>;
 type ProposalView = Prisma.ProposalGetPayload<{
   select: typeof proposalSelect;
 }>;
 type TaskStatusHistoryView = Prisma.TaskStatusHistoryGetPayload<{
   select: typeof statusHistorySelect;
+}>;
+type TaskMessageView = Prisma.TaskMessageGetPayload<{
+  select: typeof taskMessageSelect;
 }>;
 
 const normalizeString = (value: string): string => value.trim();
@@ -368,6 +393,10 @@ const parseRequiredTaskRejectReview = (body: TaskRejectReviewPayload) => ({
   ),
 });
 
+const parseRequiredTaskMessageCreate = (body: TaskMessageCreatePayload) => ({
+  text: parseRequiredString(body.text, "text", MAX_TASK_MESSAGE_LENGTH),
+});
+
 const mapTask = (task: TaskView) => ({
   id: task.id,
   customerId: task.customerId,
@@ -447,6 +476,19 @@ const mapTaskStatusHistory = (entry: TaskStatusHistoryView) => ({
   },
 });
 
+const mapTaskMessage = (message: TaskMessageView) => ({
+  id: message.id,
+  taskId: message.taskId,
+  senderId: message.senderId,
+  text: message.text,
+  createdAt: message.createdAt.toISOString(),
+  sender: {
+    id: message.sender.id,
+    username: message.sender.username,
+    displayName: message.sender.displayName,
+  },
+});
+
 const getTaskOrThrow = async (taskId: string): Promise<TaskView> => {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
@@ -489,6 +531,24 @@ const parseLimit = (value: unknown): number => {
     "limit must be a positive integer",
   );
   assertValidation(parsed <= MAX_LIMIT, `limit must be at most ${MAX_LIMIT}`);
+
+  return parsed;
+};
+
+const parseChatLimit = (value: unknown): number => {
+  if (value === undefined) {
+    return DEFAULT_CHAT_LIMIT;
+  }
+
+  const parsed = Number.parseInt(getQueryString(value) ?? "", 10);
+  assertValidation(
+    Number.isInteger(parsed) && parsed > 0,
+    "limit must be a positive integer",
+  );
+  assertValidation(
+    parsed <= MAX_CHAT_LIMIT,
+    `limit must be at most ${MAX_CHAT_LIMIT}`,
+  );
 
   return parsed;
 };
@@ -584,6 +644,61 @@ const updateTaskStatusWithHistory = async (
   await createTaskStatusHistory(tx, transition);
 
   return updatedTask;
+};
+
+type TaskChatContext = {
+  id: string;
+  customerId: string;
+  assignment: {
+    executorId: string;
+  } | null;
+};
+
+const getTaskChatContextOrThrow = async (
+  taskId: string,
+): Promise<TaskChatContext> => {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      id: true,
+      customerId: true,
+      assignment: {
+        select: {
+          executorId: true,
+        },
+      },
+    },
+  });
+
+  if (!task) {
+    throw new HttpError(404, "NOT_FOUND", "Task not found");
+  }
+
+  return task;
+};
+
+const assertTaskChatParticipantOrThrow = (
+  task: TaskChatContext,
+  authUserId: string,
+): void => {
+  if (!task.assignment) {
+    throw new HttpError(
+      403,
+      "FORBIDDEN",
+      "Chat is available only after executor selection",
+    );
+  }
+
+  const isParticipant =
+    task.customerId === authUserId || task.assignment.executorId === authUserId;
+
+  if (!isParticipant) {
+    throw new HttpError(
+      403,
+      "FORBIDDEN",
+      "Only task customer and assigned executor can access chat",
+    );
+  }
 };
 
 export const tasksRouter = Router();
@@ -927,6 +1042,60 @@ tasksRouter.get("/:id/proposals", requireAuth, async (req, res, next) => {
 
     res.status(200).json({
       items: proposals.map(mapProposal),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+tasksRouter.get("/:id/messages", requireAuth, async (req, res, next) => {
+  try {
+    const taskId = parseTaskIdOrThrow(req.params.id);
+    const authUser = getAuthUser(res);
+    const limit = parseChatLimit(req.query.limit);
+
+    const taskContext = await getTaskChatContextOrThrow(taskId);
+    assertTaskChatParticipantOrThrow(taskContext, authUser.id);
+
+    const messages = await prisma.taskMessage.findMany({
+      where: { taskId },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      select: taskMessageSelect,
+    });
+
+    res.status(200).json({
+      items: messages.reverse().map(mapTaskMessage),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+tasksRouter.post("/:id/messages", requireAuth, async (req, res, next) => {
+  try {
+    const taskId = parseTaskIdOrThrow(req.params.id);
+    assertBodyIsObject(req.body);
+
+    const authUser = getAuthUser(res);
+    const payload = parseRequiredTaskMessageCreate(
+      req.body as TaskMessageCreatePayload,
+    );
+
+    const taskContext = await getTaskChatContextOrThrow(taskId);
+    assertTaskChatParticipantOrThrow(taskContext, authUser.id);
+
+    const message = await prisma.taskMessage.create({
+      data: {
+        taskId,
+        senderId: authUser.id,
+        text: payload.text,
+      },
+      select: taskMessageSelect,
+    });
+
+    res.status(201).json({
+      message: mapTaskMessage(message),
     });
   } catch (error) {
     next(error);

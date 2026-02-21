@@ -15,6 +15,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 
+import type { TaskMessageItem } from "../entities/chat/model/types";
 import type { NotificationItem } from "../entities/notification/model/types";
 import type {
   ProposalForm,
@@ -160,6 +161,13 @@ function App() {
   const [editPending, setEditPending] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<TaskForm>(DEFAULT_TASK_FORM);
+  const [taskMessages, setTaskMessages] = useState<TaskMessageItem[]>([]);
+  const [taskMessagesLoading, setTaskMessagesLoading] = useState(false);
+  const [taskMessagesError, setTaskMessagesError] = useState<string | null>(
+    null,
+  );
+  const [taskMessageDraft, setTaskMessageDraft] = useState("");
+  const [taskMessagePending, setTaskMessagePending] = useState(false);
 
   const [publicProfileUser, setPublicProfileUser] = useState<PublicUser | null>(
     null,
@@ -242,6 +250,16 @@ function App() {
     [],
   );
 
+  const requestTaskMessages = useCallback(
+    (taskId: string, authToken: string) =>
+      apiRequest<{ items: TaskMessageItem[] }>(
+        `/tasks/${taskId}/messages?limit=100`,
+        {},
+        authToken,
+      ),
+    [],
+  );
+
   const refreshStatusHistory = async (): Promise<void> => {
     if (!token || !detailTaskId) {
       return;
@@ -297,6 +315,40 @@ function App() {
       }
     },
     [requestNotifications, token],
+  );
+
+  const refreshTaskMessages = useCallback(
+    async (options?: { silent?: boolean }): Promise<void> => {
+      if (!token || !detailTaskId) {
+        return;
+      }
+
+      const isSilent = options?.silent === true;
+
+      try {
+        if (!isSilent) {
+          setTaskMessagesLoading(true);
+        }
+        setTaskMessagesError(null);
+
+        const response = await requestTaskMessages(detailTaskId, token);
+        setTaskMessages(response.items);
+      } catch (error) {
+        if (!isSilent) {
+          setTaskMessages([]);
+          setTaskMessagesError(
+            error instanceof Error
+              ? error.message
+              : "Не удалось загрузить сообщения",
+          );
+        }
+      } finally {
+        if (!isSilent) {
+          setTaskMessagesLoading(false);
+        }
+      }
+    },
+    [detailTaskId, requestTaskMessages, token],
   );
 
   useEffect(() => {
@@ -532,6 +584,11 @@ function App() {
     setProposalForm(DEFAULT_PROPOSAL_FORM);
     setProposalError(null);
     setProposalEditMode(false);
+    setTaskMessages([]);
+    setTaskMessagesLoading(false);
+    setTaskMessagesError(null);
+    setTaskMessageDraft("");
+    setTaskMessagePending(false);
   }, [detailTaskId]);
 
   useEffect(() => {
@@ -704,6 +761,74 @@ function App() {
       active = false;
     };
   }, [profileUserId, token]);
+
+  useEffect(() => {
+    const canUseTaskChat = Boolean(
+      token &&
+      detailTaskId &&
+      authUser &&
+      detailTask &&
+      detailTask.assignment &&
+      (authUser.id === detailTask.customerId ||
+        authUser.id === detailTask.assignment.executorId),
+    );
+
+    if (!canUseTaskChat) {
+      setTaskMessages([]);
+      setTaskMessagesError(null);
+      setTaskMessagesLoading(false);
+      return;
+    }
+
+    let active = true;
+
+    const loadMessages = async (): Promise<void> => {
+      try {
+        setTaskMessagesLoading(true);
+        setTaskMessagesError(null);
+
+        const response = await requestTaskMessages(detailTaskId!, token!);
+        if (!active) {
+          return;
+        }
+
+        setTaskMessages(response.items);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setTaskMessages([]);
+        setTaskMessagesError(
+          error instanceof Error
+            ? error.message
+            : "Не удалось загрузить сообщения",
+        );
+      } finally {
+        if (active) {
+          setTaskMessagesLoading(false);
+        }
+      }
+    };
+
+    void loadMessages();
+
+    const timerId = window.setInterval(() => {
+      void refreshTaskMessages({ silent: true });
+    }, 7000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timerId);
+    };
+  }, [
+    authUser,
+    detailTask,
+    detailTaskId,
+    refreshTaskMessages,
+    requestTaskMessages,
+    token,
+  ]);
 
   const switchTab = (tab: TabState): void => {
     if (tab === "list") {
@@ -1183,6 +1308,42 @@ function App() {
       );
     } finally {
       setNotificationsPending(false);
+    }
+  };
+
+  const handleSendTaskMessage = async (): Promise<void> => {
+    if (!token || !detailTaskId) {
+      return;
+    }
+
+    const text = taskMessageDraft.trim();
+    if (!text) {
+      return;
+    }
+
+    try {
+      setTaskMessagePending(true);
+      setTaskMessagesError(null);
+
+      const response = await apiRequest<{ message: TaskMessageItem }>(
+        `/tasks/${detailTaskId}/messages`,
+        {
+          method: "POST",
+          body: JSON.stringify({ text }),
+        },
+        token,
+      );
+
+      setTaskMessages((prev) => [...prev, response.message]);
+      setTaskMessageDraft("");
+    } catch (error) {
+      setTaskMessagesError(
+        error instanceof Error
+          ? error.message
+          : "Не удалось отправить сообщение",
+      );
+    } finally {
+      setTaskMessagePending(false);
     }
   };
 
@@ -1675,6 +1836,15 @@ function App() {
       }}
       onCancelProposalEdit={() => setProposalEditMode(false)}
       onOpenExecutorProfileSetup={() => navigate("/account/executor")}
+      taskMessages={taskMessages}
+      taskMessagesLoading={taskMessagesLoading}
+      taskMessagesError={taskMessagesError}
+      taskMessageDraft={taskMessageDraft}
+      taskMessagePending={taskMessagePending}
+      onTaskMessageDraftChange={setTaskMessageDraft}
+      onSendTaskMessage={() => {
+        void handleSendTaskMessage();
+      }}
     />
   );
 
