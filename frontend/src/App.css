@@ -677,6 +677,19 @@
     line-height: 1.35;
 }
 
+.account-menu-after {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--tg-theme-hint-color, #788898);
+}
+
+.account-menu-after-text {
+    font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
+}
+
 .status-history-list {
     display: grid;
     gap: 8px;
