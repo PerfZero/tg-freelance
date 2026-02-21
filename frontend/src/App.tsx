@@ -1,5 +1,14 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import WebApp from "@twa-dev/sdk";
+import {
+  AppRoot,
+  Avatar,
+  Button,
+  Cell,
+  List,
+  Placeholder,
+  Section,
+} from "@telegram-apps/telegram-ui";
 
 import "./App.css";
 
@@ -15,6 +24,8 @@ type TgUser = {
 type WebAppState = {
   isTelegram: boolean;
   platform: string;
+  uiPlatform: "ios" | "base";
+  appearance: "light" | "dark";
   version: string;
   colorScheme: string;
   startParam?: string;
@@ -29,6 +40,8 @@ const getSafeState = (): WebAppState => {
     return {
       isTelegram: false,
       platform: "web",
+      uiPlatform: "base",
+      appearance: "light",
       version: "n/a",
       colorScheme: "light",
     };
@@ -42,6 +55,8 @@ const getSafeState = (): WebAppState => {
   return {
     isTelegram: true,
     platform: WebApp.platform,
+    uiPlatform: WebApp.platform === "ios" ? "ios" : "base",
+    appearance: WebApp.colorScheme === "dark" ? "dark" : "light",
     version: WebApp.version,
     colorScheme: WebApp.colorScheme,
     startParam: WebApp.initDataUnsafe?.start_param,
@@ -67,6 +82,7 @@ const formatName = (user?: TgUser): string => {
     .filter(Boolean)
     .join(" ")
     .trim();
+
   if (fullName) {
     return fullName;
   }
@@ -78,60 +94,90 @@ const formatName = (user?: TgUser): string => {
   return `ID ${user.id}`;
 };
 
-function App() {
-  const [state] = useState<WebAppState>(() => getSafeState());
+const getAcronym = (user?: TgUser): string => {
+  if (!user) {
+    return "TG";
+  }
 
+  const first = user.firstName?.[0] ?? user.username?.[0] ?? "T";
+  const second = user.lastName?.[0] ?? "G";
+
+  return `${first}${second}`.toUpperCase();
+};
+
+function App() {
+  const state = useMemo(() => getSafeState(), []);
   const profileName = useMemo(() => formatName(state.user), [state.user]);
+  const profileAcronym = useMemo(() => getAcronym(state.user), [state.user]);
 
   return (
-    <main className="page">
-      <section className="hero">
-        <p className="eyebrow">TG Freelance</p>
-        <h1>Миниапп для заказов и откликов</h1>
-        <p className="subtitle">
-          Базовый frontend-каркас подключен к Telegram WebApp SDK. Дальше сюда
-          будут добавлены лента задач, карточка и отклики.
-        </p>
-      </section>
+    <AppRoot appearance={state.appearance} platform={state.uiPlatform}>
+      <main className="app-shell">
+        <Section>
+          <Placeholder
+            header="TG Freelance"
+            description="MVP-каркас миниаппа в Telegram-стиле. Следующий шаг: экран ленты задач и карточка заказа."
+            action={
+              <Button
+                mode="filled"
+                size="l"
+                stretched
+                onClick={() => {
+                  if (state.isTelegram) {
+                    WebApp.showAlert("Дальше подключим экран задач.");
+                  }
+                }}
+              >
+                Открыть задачи
+              </Button>
+            }
+          >
+            <Avatar size={96} acronym={profileAcronym} />
+          </Placeholder>
+        </Section>
 
-      <section className="grid">
-        <article className="card card-accent">
-          <h2>Пользователь</h2>
-          <p className="value">{profileName}</p>
-          <p className="muted">
-            {state.isTelegram
-              ? "Сессия Telegram активна"
-              : "Открыто вне Telegram"}
-          </p>
-        </article>
-
-        <article className="card">
-          <h2>Контекст</h2>
-          <ul>
-            <li>
-              <span>Платформа</span>
-              <strong>{state.platform}</strong>
-            </li>
-            <li>
-              <span>Версия WebApp</span>
-              <strong>{state.version}</strong>
-            </li>
-            <li>
-              <span>Тема</span>
-              <strong>{state.colorScheme}</strong>
-            </li>
-          </ul>
-        </article>
-
-        <article className="card">
-          <h2>Стартовый параметр</h2>
-          <p className="value">{state.startParam ?? "не передан"}</p>
-          <p className="muted">
-            Будет использоваться для диплинков и реферальных сценариев.
-          </p>
-        </article>
-      </section>
-    </main>
+        <Section
+          header="Профиль Telegram"
+          footer="Данные получены из Telegram WebApp initData"
+        >
+          <List>
+            <Cell
+              before={<Avatar size={48} acronym={profileAcronym} />}
+              subtitle={
+                state.user?.username
+                  ? `@${state.user.username}`
+                  : "username не указан"
+              }
+              description={
+                state.isTelegram
+                  ? "Сессия Telegram активна"
+                  : "Открыто вне Telegram"
+              }
+            >
+              {profileName}
+            </Cell>
+            <Cell subtitle="Telegram ID" after={state.user?.id ?? "n/a"}>
+              Пользователь
+            </Cell>
+            <Cell subtitle="Платформа" after={state.platform}>
+              Контекст
+            </Cell>
+            <Cell subtitle="Версия WebApp" after={state.version}>
+              API
+            </Cell>
+            <Cell subtitle="Тема" after={state.colorScheme}>
+              Appearance
+            </Cell>
+            <Cell
+              subtitle="start_param"
+              after={state.startParam ?? "не передан"}
+            >
+              Deeplink
+            </Cell>
+          </List>
+        </Section>
+      </main>
+    </AppRoot>
   );
 }
 
