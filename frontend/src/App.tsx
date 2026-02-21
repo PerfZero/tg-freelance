@@ -116,7 +116,7 @@ function App() {
         <Section>
           <Placeholder
             header="TG Freelance"
-            description="MVP-каркас миниаппа в Telegram-стиле. Тест автодеплоя: 2026-02-21."
+            description="MVP-каркас миниаппа в Telegram-стиле. Следующий шаг: экран ленты задач и карточка заказа."
             action={
               <Button
                 mode="filled"

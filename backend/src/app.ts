@@ -8,6 +8,7 @@ import { requestContextMiddleware } from "./common/request-context";
 import { requestLoggerMiddleware } from "./common/request-logger";
 import { authRouter } from "./modules/auth/auth.routes";
 import { healthRouter } from "./modules/health/health.routes";
+import { profileRouter } from "./modules/profile/profile.routes";
 import { rootRouter } from "./modules/root/root.routes";
 
 export const createApp = () => {
@@ -22,6 +23,7 @@ export const createApp = () => {
   app.use("/", rootRouter);
   app.use("/health", healthRouter);
   app.use("/auth", authRouter);
+  app.use("/profile", profileRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

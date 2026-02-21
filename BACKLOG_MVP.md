@@ -182,3 +182,5 @@
 - [x] `E1-T1` Реализован `POST /auth/telegram` с проверкой подписи `initData`.
 - [x] `E1-T2` Реализован `GET /auth/me` по Bearer-токену.
 - [x] `E1-T3` На логине выполняется upsert `users` и `profiles`.
+- [x] `E1-T4` Реализованы `GET /profile/me` и `PATCH /profile/me`.
+- [x] `E1-T5` Реализован `GET /profile/:userId`.

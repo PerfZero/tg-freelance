@@ -35,6 +35,22 @@ npm run prisma:studio
   - header: `Authorization: Bearer <token>`
   - результат: текущий пользователь
 
+## Profile API
+
+- `GET /profile/me`:
+  - header: `Authorization: Bearer <token>`
+  - результат: текущий пользователь с профилем
+- `PATCH /profile/me`:
+  - header: `Authorization: Bearer <token>`
+  - body fields (any subset):
+    - `display_name: string`
+    - `about: string | null`
+    - `skills: string[]`
+  - результат: обновленный пользователь
+- `GET /profile/:userId`:
+  - header: `Authorization: Bearer <token>`
+  - результат: публичный профиль пользователя
+
 ## Ошибки и логирование
 
 - Все API-ошибки возвращаются в формате:
