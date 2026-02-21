@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { TaskMessageItem } from "../../../entities/chat/model/types";
 import { Home } from "lucide-react";
 
@@ -433,6 +434,9 @@ export const TaskDetailPage = ({
   onTaskMessageDraftChange,
   onSendTaskMessage,
 }: TaskDetailPageProps): JSX.Element => {
+  const taskChatListRef = useRef<HTMLDivElement | null>(null);
+  const prevTaskMessagesCountRef = useRef(0);
+
   if (detailLoading) {
     return (
       <Section>
@@ -480,6 +484,34 @@ export const TaskDetailPage = ({
     (authUser.id === detailTask.customerId ||
       authUser.id === detailTask.assignment.executorId),
   );
+
+  useEffect(() => {
+    if (!canUseTaskChat) {
+      prevTaskMessagesCountRef.current = 0;
+      return;
+    }
+
+    const listElement = taskChatListRef.current;
+    if (!listElement) {
+      return;
+    }
+
+    const prevCount = prevTaskMessagesCountRef.current;
+    const nextCount = taskMessages.length;
+    const distanceToBottom =
+      listElement.scrollHeight -
+      listElement.scrollTop -
+      listElement.clientHeight;
+    const wasNearBottom = distanceToBottom < 80;
+
+    if (prevCount === 0 || nextCount > prevCount || wasNearBottom) {
+      window.requestAnimationFrame(() => {
+        listElement.scrollTop = listElement.scrollHeight;
+      });
+    }
+
+    prevTaskMessagesCountRef.current = nextCount;
+  }, [canUseTaskChat, taskMessages]);
 
   return (
     <>
@@ -676,7 +708,7 @@ export const TaskDetailPage = ({
                 description="Напиши первое сообщение по задаче."
               />
             ) : (
-              <div className="task-chat-list">
+              <div className="task-chat-list" ref={taskChatListRef}>
                 {taskMessages.map((message) => {
                   const isOwnMessage = authUser?.id === message.senderId;
 

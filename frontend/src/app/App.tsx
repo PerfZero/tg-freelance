@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { CirclePlus, Home, UserRound } from "lucide-react";
@@ -168,6 +169,8 @@ function App() {
   );
   const [taskMessageDraft, setTaskMessageDraft] = useState("");
   const [taskMessagePending, setTaskMessagePending] = useState(false);
+  const taskMessagesRef = useRef<TaskMessageItem[]>([]);
+  const chatInitializedRef = useRef(false);
 
   const [publicProfileUser, setPublicProfileUser] = useState<PublicUser | null>(
     null,
@@ -227,6 +230,7 @@ function App() {
     () => getExecutorProfileCheck(authUser?.profile ?? null),
     [authUser],
   );
+  const authUserId = authUser?.id ?? null;
 
   const requestStatusHistory = (taskId: string, authToken: string) =>
     apiRequest<{ items: TaskStatusHistoryItem[] }>(
@@ -258,6 +262,89 @@ function App() {
         authToken,
       ),
     [],
+  );
+
+  const playIncomingMessageSignal = useCallback((): void => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const telegram = (
+        window as Window & {
+          Telegram?: { WebApp?: { HapticFeedback?: unknown } };
+        }
+      ).Telegram?.WebApp;
+
+      (
+        telegram?.HapticFeedback as
+          | {
+              notificationOccurred?: (
+                type: "error" | "success" | "warning",
+              ) => void;
+            }
+          | undefined
+      )?.notificationOccurred?.("warning");
+    } catch {
+      // no-op
+    }
+
+    try {
+      const AudioContextCtor =
+        window.AudioContext ??
+        (window as Window & { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+
+      if (!AudioContextCtor) {
+        return;
+      }
+
+      const context = new AudioContextCtor();
+      const oscillator = context.createOscillator();
+      const gainNode = context.createGain();
+
+      oscillator.type = "sine";
+      oscillator.frequency.value = 880;
+
+      oscillator.connect(gainNode);
+      gainNode.connect(context.destination);
+
+      const now = context.currentTime;
+      gainNode.gain.setValueAtTime(0.0001, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.06, now + 0.01);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+
+      oscillator.start(now);
+      oscillator.stop(now + 0.2);
+      oscillator.onended = () => {
+        void context.close();
+      };
+    } catch {
+      // no-op
+    }
+  }, []);
+
+  const applyTaskMessages = useCallback(
+    (items: TaskMessageItem[]): void => {
+      const prevItems = taskMessagesRef.current;
+      const isInitialized = chatInitializedRef.current;
+
+      if (isInitialized && authUserId) {
+        const prevIds = new Set(prevItems.map((item) => item.id));
+        const hasIncomingMessage = items.some(
+          (item) => !prevIds.has(item.id) && item.senderId !== authUserId,
+        );
+
+        if (hasIncomingMessage) {
+          playIncomingMessageSignal();
+        }
+      }
+
+      chatInitializedRef.current = true;
+      taskMessagesRef.current = items;
+      setTaskMessages(items);
+    },
+    [authUserId, playIncomingMessageSignal],
   );
 
   const refreshStatusHistory = async (): Promise<void> => {
@@ -332,7 +419,7 @@ function App() {
         setTaskMessagesError(null);
 
         const response = await requestTaskMessages(detailTaskId, token);
-        setTaskMessages(response.items);
+        applyTaskMessages(response.items);
       } catch (error) {
         if (!isSilent) {
           setTaskMessages([]);
@@ -348,7 +435,7 @@ function App() {
         }
       }
     },
-    [detailTaskId, requestTaskMessages, token],
+    [applyTaskMessages, detailTaskId, requestTaskMessages, token],
   );
 
   useEffect(() => {
@@ -589,6 +676,8 @@ function App() {
     setTaskMessagesError(null);
     setTaskMessageDraft("");
     setTaskMessagePending(false);
+    taskMessagesRef.current = [];
+    chatInitializedRef.current = false;
   }, [detailTaskId]);
 
   useEffect(() => {
@@ -777,6 +866,8 @@ function App() {
       setTaskMessages([]);
       setTaskMessagesError(null);
       setTaskMessagesLoading(false);
+      taskMessagesRef.current = [];
+      chatInitializedRef.current = false;
       return;
     }
 
@@ -792,7 +883,7 @@ function App() {
           return;
         }
 
-        setTaskMessages(response.items);
+        applyTaskMessages(response.items);
       } catch (error) {
         if (!active) {
           return;
@@ -822,6 +913,7 @@ function App() {
       window.clearInterval(timerId);
     };
   }, [
+    applyTaskMessages,
     authUser,
     detailTask,
     detailTaskId,
@@ -1334,7 +1426,9 @@ function App() {
         token,
       );
 
-      setTaskMessages((prev) => [...prev, response.message]);
+      const nextMessages = [...taskMessagesRef.current, response.message];
+      taskMessagesRef.current = nextMessages;
+      setTaskMessages(nextMessages);
       setTaskMessageDraft("");
     } catch (error) {
       setTaskMessagesError(
