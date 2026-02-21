@@ -1676,18 +1676,20 @@ function App() {
           ) : null}
         </Section>
 
-        {authGate ? (
-          authGate
-        ) : (
-          <Routes>
-            <Route path="/" element={<Navigate to="/tasks" replace />} />
-            <Route path="/tasks" element={renderTasksList()} />
-            <Route path="/tasks/new" element={renderCreateTask()} />
-            <Route path="/tasks/:taskId" element={renderDetailTask()} />
-            <Route path="/profile" element={renderProfile()} />
-            <Route path="*" element={<Navigate to="/tasks" replace />} />
-          </Routes>
-        )}
+        <div className="page-content">
+          {authGate ? (
+            authGate
+          ) : (
+            <Routes>
+              <Route path="/" element={<Navigate to="/tasks" replace />} />
+              <Route path="/tasks" element={renderTasksList()} />
+              <Route path="/tasks/new" element={renderCreateTask()} />
+              <Route path="/tasks/:taskId" element={renderDetailTask()} />
+              <Route path="/profile" element={renderProfile()} />
+              <Route path="*" element={<Navigate to="/tasks" replace />} />
+            </Routes>
+          )}
+        </div>
       </main>
     </AppRoot>
   );
