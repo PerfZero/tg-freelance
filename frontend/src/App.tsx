@@ -42,6 +42,8 @@ type TgUser = {
   lastName?: string;
 };
 
+type PrimaryRoleValue = "CUSTOMER" | "EXECUTOR";
+
 type WebAppState = {
   isTelegram: boolean;
   platform: string;
@@ -59,6 +61,7 @@ type PublicUser = {
   telegramId: string;
   username: string | null;
   displayName: string;
+  primaryRole: PrimaryRoleValue | null;
   profile: {
     about: string | null;
     skills: string[];
@@ -415,6 +418,21 @@ const trimText = (value: string, max = 130): string => {
   return `${prepared.slice(0, max)}...`;
 };
 
+const getPreferredTabByRole = (role: PrimaryRoleValue | null): TabState =>
+  role === "CUSTOMER" ? "create" : "list";
+
+const toRoleLabel = (role: PrimaryRoleValue | null): string => {
+  if (role === "CUSTOMER") {
+    return "Чаще заказчик";
+  }
+
+  if (role === "EXECUTOR") {
+    return "Чаще исполнитель";
+  }
+
+  return "Не выбран";
+};
+
 const validateTaskForm = (form: TaskForm): string | null => {
   if (form.title.trim().length < 4) {
     return "Заголовок должен быть не короче 4 символов";
@@ -503,6 +521,8 @@ function App() {
   const [authUser, setAuthUser] = useState<PublicUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [roleSavePending, setRoleSavePending] = useState(false);
+  const [roleSaveError, setRoleSaveError] = useState<string | null>(null);
 
   const [filterDraft, setFilterDraft] = useState<TaskFilters>(DEFAULT_FILTERS);
   const [filterApplied, setFilterApplied] =
@@ -567,6 +587,11 @@ function App() {
   const [notificationsPending, setNotificationsPending] = useState(false);
 
   const isAuthenticated = Boolean(token);
+  const preferredTab = getPreferredTabByRole(authUser?.primaryRole ?? null);
+  const preferredPath = preferredTab === "create" ? "/create" : "/feed";
+  const needsRoleOnboarding = Boolean(
+    isAuthenticated && authUser && authUser.primaryRole === null,
+  );
   const activeTab: TabState = location.pathname.startsWith("/account")
     ? "profile"
     : location.pathname === "/create"
@@ -667,10 +692,26 @@ function App() {
   );
 
   useEffect(() => {
-    if (location.pathname === "/") {
-      navigate("/feed", { replace: true });
+    if (authLoading || !isAuthenticated || !authUser) {
+      return;
     }
-  }, [location.pathname, navigate]);
+
+    if (authUser.primaryRole === null && location.pathname !== "/onboarding") {
+      navigate("/onboarding", { replace: true });
+      return;
+    }
+
+    if (authUser.primaryRole !== null && location.pathname === "/onboarding") {
+      navigate(preferredPath, { replace: true });
+    }
+  }, [
+    authLoading,
+    authUser,
+    isAuthenticated,
+    location.pathname,
+    navigate,
+    preferredPath,
+  ]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -1465,6 +1506,96 @@ function App() {
     }
   };
 
+  const handleSetPrimaryRole = async (
+    role: PrimaryRoleValue,
+    options?: { navigateAfterSave?: boolean },
+  ): Promise<void> => {
+    if (!token) {
+      return;
+    }
+
+    try {
+      setRoleSavePending(true);
+      setRoleSaveError(null);
+
+      const response = await apiRequest<{ user: PublicUser }>(
+        "/profile/me",
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            primary_role: role,
+          }),
+        },
+        token,
+      );
+
+      setAuthUser(response.user);
+
+      if (options?.navigateAfterSave) {
+        const nextPath =
+          getPreferredTabByRole(response.user.primaryRole) === "create"
+            ? "/create"
+            : "/feed";
+
+        navigate(nextPath, { replace: true });
+      }
+    } catch (error) {
+      setRoleSaveError(
+        error instanceof Error ? error.message : "Не удалось сохранить роль",
+      );
+    } finally {
+      setRoleSavePending(false);
+    }
+  };
+
+  const renderRoleOnboarding = (): JSX.Element => (
+    <Section
+      header="Стартовый режим"
+      footer="Это влияет на стартовый экран и акценты в интерфейсе. Ограничений по функциям нет."
+    >
+      <p className="inline-hint">
+        Выбери, как ты чаще используешь сервис. Роль можно поменять позже в
+        профиле.
+      </p>
+
+      <div className="role-choice-grid">
+        <button
+          className="role-choice-card"
+          type="button"
+          disabled={roleSavePending}
+          onClick={() => {
+            void handleSetPrimaryRole("CUSTOMER", {
+              navigateAfterSave: true,
+            });
+          }}
+        >
+          <span className="role-choice-title">Чаще заказчик</span>
+          <span className="role-choice-description">
+            Сразу попадаешь в создание задачи и быстрее публикуешь заказ.
+          </span>
+        </button>
+
+        <button
+          className="role-choice-card"
+          type="button"
+          disabled={roleSavePending}
+          onClick={() => {
+            void handleSetPrimaryRole("EXECUTOR", {
+              navigateAfterSave: true,
+            });
+          }}
+        >
+          <span className="role-choice-title">Чаще исполнитель</span>
+          <span className="role-choice-description">
+            Стартовая вкладка будет с лентой задач, чтобы быстрее откликаться.
+          </span>
+        </button>
+      </div>
+
+      {roleSaveError ? <p className="error-text">{roleSaveError}</p> : null}
+    </Section>
+  );
+
   const renderProfile = (): JSX.Element => {
     if (!authUser) {
       return <></>;
@@ -1503,6 +1634,43 @@ function App() {
               Рейтинг
             </Cell>
           </List>
+        </Section>
+
+        <Section
+          header="Роль в интерфейсе"
+          footer="Роль меняет только приоритет вкладок и CTA, но не ограничивает твои действия."
+        >
+          <Cell
+            subtitle="Текущий приоритет"
+            after={toRoleLabel(authUser.primaryRole)}
+          >
+            Основной сценарий
+          </Cell>
+
+          <div className="role-switch-row">
+            <Button
+              size="m"
+              mode={authUser.primaryRole === "CUSTOMER" ? "filled" : "outline"}
+              disabled={roleSavePending}
+              onClick={() => {
+                void handleSetPrimaryRole("CUSTOMER");
+              }}
+            >
+              Чаще заказчик
+            </Button>
+            <Button
+              size="m"
+              mode={authUser.primaryRole === "EXECUTOR" ? "filled" : "outline"}
+              disabled={roleSavePending}
+              onClick={() => {
+                void handleSetPrimaryRole("EXECUTOR");
+              }}
+            >
+              Чаще исполнитель
+            </Button>
+          </div>
+
+          {roleSaveError ? <p className="error-text">{roleSaveError}</p> : null}
         </Section>
 
         <Section
@@ -1594,6 +1762,7 @@ function App() {
       filterApplied.budgetMin.trim(),
       filterApplied.budgetMax.trim(),
     ].filter((value) => value.length > 0).length;
+    const isCustomerPriority = authUser?.primaryRole === "CUSTOMER";
 
     const filtersSummary =
       activeFiltersCount > 0
@@ -1619,10 +1788,16 @@ function App() {
                 </span>
               </span>
             </Button>
-            <Button size="m" mode="bezeled" onClick={() => navigate("/create")}>
+            <Button
+              size="m"
+              mode={isCustomerPriority ? "filled" : "bezeled"}
+              onClick={() => navigate("/create")}
+            >
               <span className="btn-with-icon">
                 <CirclePlus size={16} />
-                <span>Создать задачу</span>
+                <span>
+                  {isCustomerPriority ? "Создать задачу" : "Разместить задачу"}
+                </span>
               </span>
             </Button>
           </div>
@@ -2434,17 +2609,24 @@ function App() {
             authGate
           ) : (
             <Routes>
-              <Route path="/" element={<Navigate to="/feed" replace />} />
+              <Route
+                path="/"
+                element={<Navigate to={preferredPath} replace />}
+              />
+              <Route path="/onboarding" element={renderRoleOnboarding()} />
               <Route path="/feed" element={renderTasksList()} />
               <Route path="/create" element={renderCreateTask()} />
               <Route path="/task/:taskId" element={renderDetailTask()} />
               <Route path="/account" element={renderProfile()} />
-              <Route path="*" element={<Navigate to="/feed" replace />} />
+              <Route
+                path="*"
+                element={<Navigate to={preferredPath} replace />}
+              />
             </Routes>
           )}
         </div>
 
-        {!authGate ? (
+        {!authGate && !needsRoleOnboarding ? (
           <nav className="bottom-nav">
             <button
               className={`bottom-nav-item ${activeTab === "list" ? "bottom-nav-item-active" : ""}`}

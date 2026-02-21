@@ -335,6 +335,73 @@
     flex-basis: 120px;
 }
 
+.role-choice-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.role-choice-card {
+    width: 100%;
+    border: 1px solid
+        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.14));
+    border-radius: 12px;
+    background: var(--tg-theme-bg-color, #ffffff);
+    padding: 12px;
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+        border-color 0.18s ease,
+        background-color 0.18s ease;
+}
+
+.role-choice-card:active {
+    border-color: color-mix(
+        in srgb,
+        var(--tg-theme-link-color, #248dff) 42%,
+        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.14))
+    );
+    background: color-mix(
+        in srgb,
+        var(--tg-theme-link-color, #248dff) 8%,
+        var(--tg-theme-bg-color, #ffffff)
+    );
+}
+
+.role-choice-card:disabled {
+    opacity: 0.62;
+    cursor: default;
+}
+
+.role-choice-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--tg-theme-text-color, #11181c);
+}
+
+.role-choice-description {
+    font-size: 13px;
+    color: var(--tg-theme-hint-color, #788898);
+    line-height: 1.35;
+}
+
+.role-switch-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.role-switch-row .ui-btn {
+    flex: 1 1 170px;
+}
+
 .inline-hint {
     margin: 2px 0 0;
     color: var(--tg-theme-hint-color, #788898);

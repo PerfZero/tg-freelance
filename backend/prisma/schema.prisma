@@ -23,6 +23,11 @@ enum NotificationType {
   TASK_REJECTED
 }
 
+enum ProfilePrimaryRole {
+  CUSTOMER
+  EXECUTOR
+}
+
 model User {
   id                  String              @id @default(uuid()) @db.Uuid
   telegramId          BigInt              @unique @map("telegram_id")
@@ -47,6 +52,7 @@ model Profile {
   userId              String   @id @map("user_id") @db.Uuid
   about               String?
   skills              String[]
+  primaryRole         ProfilePrimaryRole? @map("primary_role")
   rating              Decimal  @default(0) @db.Decimal(3, 2)
   completedTasksCount Int      @default(0) @map("completed_tasks_count")
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -11,11 +11,14 @@ export type PublicProfile = {
   completedTasksCount: number;
 };
 
+export type PrimaryRoleValue = "CUSTOMER" | "EXECUTOR";
+
 export type PublicUser = {
   id: string;
   telegramId: string;
   username: string | null;
   displayName: string;
+  primaryRole: PrimaryRoleValue | null;
   roleFlags: unknown;
   isBlocked: boolean;
   createdAt: string;

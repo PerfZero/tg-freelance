@@ -5,6 +5,7 @@ export const mapPublicUser = (user: UserWithProfile): PublicUser => ({
   telegramId: user.telegramId.toString(),
   username: user.username,
   displayName: user.displayName,
+  primaryRole: user.profile?.primaryRole ?? null,
   roleFlags: user.roleFlags,
   isBlocked: user.isBlocked,
   createdAt: user.createdAt.toISOString(),
@@ -14,7 +15,7 @@ export const mapPublicUser = (user: UserWithProfile): PublicUser => ({
         about: user.profile.about,
         skills: user.profile.skills,
         rating: Number(user.profile.rating.toString()),
-        completedTasksCount: user.profile.completedTasksCount
+        completedTasksCount: user.profile.completedTasksCount,
       }
-    : null
+    : null,
 });

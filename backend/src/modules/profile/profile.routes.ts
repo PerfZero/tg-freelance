@@ -11,12 +11,15 @@ type ProfilePatchPayload = {
   display_name?: unknown;
   about?: unknown;
   skills?: unknown;
+  primary_role?: unknown;
 };
 
 const MAX_DISPLAY_NAME_LENGTH = 80;
 const MAX_ABOUT_LENGTH = 2000;
 const MAX_SKILLS = 30;
 const MAX_SKILL_LENGTH = 40;
+const PRIMARY_ROLES = ["CUSTOMER", "EXECUTOR"] as const;
+type PrimaryRoleValue = (typeof PRIMARY_ROLES)[number];
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -113,6 +116,35 @@ const parseSkills = (
   };
 };
 
+const parsePrimaryRole = (
+  value: unknown,
+): { provided: boolean; normalized?: PrimaryRoleValue | null } => {
+  if (value === undefined) {
+    return { provided: false };
+  }
+
+  if (value === null) {
+    return { provided: true, normalized: null };
+  }
+
+  assertValidation(
+    typeof value === "string",
+    "primary_role must be CUSTOMER, EXECUTOR or null",
+  );
+
+  const normalized = normalizeString(value as string).toUpperCase();
+
+  assertValidation(
+    PRIMARY_ROLES.includes(normalized as PrimaryRoleValue),
+    "primary_role must be CUSTOMER or EXECUTOR",
+  );
+
+  return {
+    provided: true,
+    normalized: normalized as PrimaryRoleValue,
+  };
+};
+
 const getUserById = async (userId: string): Promise<UserWithProfile> => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -133,9 +165,13 @@ const patchProfile = async (
   const parsedDisplayName = parseDisplayName(payload.display_name);
   const parsedAbout = parseAbout(payload.about);
   const parsedSkills = parseSkills(payload.skills);
+  const parsedPrimaryRole = parsePrimaryRole(payload.primary_role);
 
   const hasUpdates =
-    parsedDisplayName.provided || parsedAbout.provided || parsedSkills.provided;
+    parsedDisplayName.provided ||
+    parsedAbout.provided ||
+    parsedSkills.provided ||
+    parsedPrimaryRole.provided;
 
   assertValidation(hasUpdates, "No valid fields to update");
 
@@ -148,17 +184,27 @@ const patchProfile = async (
     });
   }
 
-  if (parsedAbout.provided || parsedSkills.provided) {
+  if (
+    parsedAbout.provided ||
+    parsedSkills.provided ||
+    parsedPrimaryRole.provided
+  ) {
     await prisma.profile.upsert({
       where: { userId },
       update: {
         ...(parsedAbout.provided ? { about: parsedAbout.normalized } : {}),
         ...(parsedSkills.provided ? { skills: parsedSkills.normalized } : {}),
+        ...(parsedPrimaryRole.provided
+          ? { primaryRole: parsedPrimaryRole.normalized }
+          : {}),
       },
       create: {
         userId,
         about: parsedAbout.provided ? parsedAbout.normalized : null,
         skills: parsedSkills.provided ? (parsedSkills.normalized ?? []) : [],
+        primaryRole: parsedPrimaryRole.provided
+          ? parsedPrimaryRole.normalized
+          : null,
       },
     });
   }
