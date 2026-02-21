@@ -1,36 +1,60 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { env } from "../config/env";
+import { logger } from "./logger";
 import { HttpError } from "./http-error";
+import { getRequestId } from "./request-context";
+
+const isJsonSyntaxError = (error: unknown): boolean =>
+  error instanceof SyntaxError && "status" in error && "body" in error;
 
 export const errorHandler = (
   error: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
-  _next: NextFunction
+  _next: NextFunction,
 ): void => {
+  const requestId = getRequestId(res);
+
+  let knownError: HttpError;
+
   if (error instanceof HttpError) {
-    res.status(error.status).json({
-      error: {
-        code: error.code,
-        message: error.message,
-        details: error.details ?? {}
-      }
-    });
-    return;
+    knownError = error;
+  } else if (isJsonSyntaxError(error)) {
+    knownError = new HttpError(
+      400,
+      "VALIDATION_ERROR",
+      "Invalid JSON payload",
+      { path: req.path },
+    );
+  } else {
+    knownError = new HttpError(500, "INTERNAL_ERROR", "Internal Server Error");
   }
 
-  const message = error instanceof Error ? error.message : "Internal Server Error";
-  if (env.nodeEnv !== "test") {
-    // eslint-disable-next-line no-console
-    console.error(error);
-  }
+  const details = {
+    ...(knownError.details ?? {}),
+    requestId,
+  };
 
-  res.status(500).json({
+  logger.error("request.error", {
+    requestId,
+    method: req.method,
+    path: req.originalUrl,
+    status: knownError.status,
+    code: knownError.code,
+    errorMessage: knownError.message,
+    details,
+    stack:
+      error instanceof Error && env.nodeEnv !== "production"
+        ? error.stack
+        : undefined,
+  });
+
+  res.status(knownError.status).json({
     error: {
-      code: "INTERNAL_ERROR",
-      message,
-      details: {}
-    }
+      code: knownError.code,
+      message: knownError.message,
+      details,
+    },
   });
 };

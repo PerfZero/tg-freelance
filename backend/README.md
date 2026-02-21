@@ -26,6 +26,28 @@ npm run prisma:migrate -- --name <migration_name>
 npm run prisma:studio
 ```
 
+## Ошибки и логирование
+
+- Все API-ошибки возвращаются в формате:
+
+```json
+{
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Route GET /foo not found",
+    "details": {
+      "requestId": "..."
+    }
+  }
+}
+```
+
+- Для каждого запроса добавляется заголовок `x-request-id`.
+- Пишутся структурные JSON-логи:
+  - `request.start`
+  - `request.finish`
+  - `request.error`
+
 ## Структура
 
 - `src/main.ts` - точка входа

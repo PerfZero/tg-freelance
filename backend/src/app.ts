@@ -4,6 +4,8 @@ import helmet from "helmet";
 
 import { errorHandler } from "./common/error-handler";
 import { notFoundHandler } from "./common/not-found";
+import { requestContextMiddleware } from "./common/request-context";
+import { requestLoggerMiddleware } from "./common/request-logger";
 import { healthRouter } from "./modules/health/health.routes";
 import { rootRouter } from "./modules/root/root.routes";
 
@@ -12,6 +14,8 @@ export const createApp = () => {
 
   app.use(helmet());
   app.use(cors());
+  app.use(requestContextMiddleware);
+  app.use(requestLoggerMiddleware);
   app.use(express.json({ limit: "1mb" }));
 
   app.use("/", rootRouter);

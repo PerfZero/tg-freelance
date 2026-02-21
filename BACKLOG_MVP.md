@@ -177,3 +177,4 @@
 - [x] `E0-T1` Инициализирован backend-каркас (`Express + TypeScript`, env, модульная структура, `GET /health`).
 - [x] `E0-T2` Поднят PostgreSQL (docker compose), подключен Prisma, создана и применена миграция `init`.
 - [x] `E0-T3` Инициализирован frontend (`React + Vite + TypeScript`), подключен Telegram WebApp SDK, добавлен базовый Mini App shell.
+- [x] `E0-T4` Введены `request-id`, централизованный формат ошибок и структурное логирование запросов/ошибок.
