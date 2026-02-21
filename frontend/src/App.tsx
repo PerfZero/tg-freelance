@@ -46,6 +46,13 @@ type PublicUser = {
   } | null;
 };
 
+type TaskStatusValue =
+  | "OPEN"
+  | "IN_PROGRESS"
+  | "ON_REVIEW"
+  | "COMPLETED"
+  | "CANCELED";
+
 type TaskItem = {
   id: string;
   customerId: string;
@@ -55,7 +62,7 @@ type TaskItem = {
   deadlineAt: string | null;
   category: string;
   tags: string[];
-  status: "OPEN" | "IN_PROGRESS" | "ON_REVIEW" | "COMPLETED" | "CANCELED";
+  status: TaskStatusValue;
   createdAt: string;
   updatedAt: string;
   customer: {
@@ -65,13 +72,15 @@ type TaskItem = {
   } | null;
 };
 
+type SortValue = "new" | "budget" | "budget_asc" | "budget_desc";
+
 type TaskFilters = {
   q: string;
   category: string;
   budgetMin: string;
   budgetMax: string;
-  sort: "new" | "budget" | "budget_asc" | "budget_desc";
-  status: "OPEN" | "IN_PROGRESS" | "ON_REVIEW" | "COMPLETED" | "CANCELED";
+  sort: SortValue;
+  status: TaskStatusValue;
 };
 
 type CreateTaskForm = {
@@ -88,7 +97,10 @@ type EditTaskForm = CreateTaskForm;
 type ViewState =
   | { screen: "list" }
   | { screen: "create" }
+  | { screen: "profile" }
   | { screen: "detail"; taskId: string };
+
+type TabState = "list" | "create" | "profile";
 
 const TOKEN_KEY = "tg_freelance_access_token";
 
@@ -109,6 +121,21 @@ const DEFAULT_CREATE_FORM: CreateTaskForm = {
   deadlineAt: "",
   tags: "",
 };
+
+const STATUS_OPTIONS: Array<{ value: TaskStatusValue; label: string }> = [
+  { value: "OPEN", label: "Открыта" },
+  { value: "IN_PROGRESS", label: "В работе" },
+  { value: "ON_REVIEW", label: "На проверке" },
+  { value: "COMPLETED", label: "Завершена" },
+  { value: "CANCELED", label: "Отменена" },
+];
+
+const SORT_OPTIONS: Array<{ value: SortValue; label: string }> = [
+  { value: "new", label: "Сначала новые" },
+  { value: "budget", label: "Дороже сверху" },
+  { value: "budget_asc", label: "Дешевле сверху" },
+  { value: "budget_desc", label: "Дороже сверху (alt)" },
+];
 
 const getApiBaseUrl = (): string => {
   if (typeof window === "undefined") {
@@ -180,6 +207,9 @@ const getAcronym = (user?: TgUser): string => {
 
   return `${first}${second}`.toUpperCase();
 };
+
+const getStatusLabel = (status: TaskStatusValue): string =>
+  STATUS_OPTIONS.find((item) => item.value === status)?.label ?? status;
 
 const apiRequest = async <T,>(
   path: string,
@@ -297,6 +327,36 @@ const fromInputDateTimeValue = (value: string): string | null => {
   return date.toISOString();
 };
 
+const trimText = (value: string, max = 130): string => {
+  const prepared = value.trim();
+  if (prepared.length <= max) {
+    return prepared;
+  }
+
+  return `${prepared.slice(0, max)}...`;
+};
+
+const validateTaskForm = (form: CreateTaskForm): string | null => {
+  if (form.title.trim().length < 4) {
+    return "Заголовок должен быть не короче 4 символов";
+  }
+
+  if (form.description.trim().length < 10) {
+    return "Описание должно быть не короче 10 символов";
+  }
+
+  if (form.category.trim().length < 2) {
+    return "Укажи категорию (минимум 2 символа)";
+  }
+
+  const budget = Number(form.budget);
+  if (!Number.isFinite(budget) || budget <= 0) {
+    return "Бюджет должен быть числом больше 0";
+  }
+
+  return null;
+};
+
 const buildTasksQuery = (page: number, filters: TaskFilters): string => {
   const params = new URLSearchParams({
     page: String(page),
@@ -368,6 +428,7 @@ function App() {
   const [editForm, setEditForm] = useState<EditTaskForm>(DEFAULT_CREATE_FORM);
 
   const isAuthenticated = Boolean(token);
+  const activeTab: TabState = view.screen === "detail" ? "list" : view.screen;
 
   useEffect(() => {
     let active = true;
@@ -395,6 +456,7 @@ function App() {
           window.localStorage.setItem(TOKEN_KEY, result.token);
           return;
         }
+
         const fallbackToken =
           typeof window !== "undefined"
             ? window.localStorage.getItem(TOKEN_KEY)
@@ -424,9 +486,7 @@ function App() {
         setToken(null);
         window.localStorage.removeItem(TOKEN_KEY);
         setAuthError(
-          error instanceof Error
-            ? error.message
-            : "Не удалось авторизоваться",
+          error instanceof Error ? error.message : "Не удалось авторизоваться",
         );
       } finally {
         if (active) {
@@ -546,6 +606,24 @@ function App() {
     };
   }, [token, view]);
 
+  const switchTab = (tab: TabState): void => {
+    setDetailError(null);
+    setEditMode(false);
+
+    if (tab === "list") {
+      setView({ screen: "list" });
+      return;
+    }
+
+    if (tab === "create") {
+      setCreateError(null);
+      setView({ screen: "create" });
+      return;
+    }
+
+    setView({ screen: "profile" });
+  };
+
   const handleApplyFilters = (): void => {
     setPage(1);
     setFilterApplied(filterDraft);
@@ -569,15 +647,21 @@ function App() {
       return;
     }
 
+    const validationError = validateTaskForm(createForm);
+    if (validationError) {
+      setCreateError(validationError);
+      return;
+    }
+
     try {
       setCreatePending(true);
       setCreateError(null);
 
       const payload = {
-        title: createForm.title,
-        description: createForm.description,
+        title: createForm.title.trim(),
+        description: createForm.description.trim(),
         budget: Number(createForm.budget),
-        category: createForm.category,
+        category: createForm.category.trim(),
         deadline_at: fromInputDateTimeValue(createForm.deadlineAt),
         tags: parseTagsInput(createForm.tags),
       };
@@ -610,15 +694,21 @@ function App() {
       return;
     }
 
+    const validationError = validateTaskForm(editForm);
+    if (validationError) {
+      setEditError(validationError);
+      return;
+    }
+
     try {
       setEditPending(true);
       setEditError(null);
 
       const payload = {
-        title: editForm.title,
-        description: editForm.description,
+        title: editForm.title.trim(),
+        description: editForm.description.trim(),
         budget: Number(editForm.budget),
-        category: editForm.category,
+        category: editForm.category.trim(),
         deadline_at: fromInputDateTimeValue(editForm.deadlineAt),
         tags: parseTagsInput(editForm.tags),
       };
@@ -673,7 +763,7 @@ function App() {
     }
   };
 
-  const renderAuthBlock = (): JSX.Element => {
+  const renderAuthState = (): JSX.Element => {
     if (authLoading) {
       return (
         <Section>
@@ -699,6 +789,14 @@ function App() {
       );
     }
 
+    return <></>;
+  };
+
+  const renderProfile = (): JSX.Element => {
+    if (!authUser) {
+      return <></>;
+    }
+
     return (
       <Section
         header="Профиль"
@@ -716,6 +814,12 @@ function App() {
           >
             {authUser.displayName}
           </Cell>
+          <Cell subtitle="Статус профиля" after={authUser.profile ? "Заполнен" : "Пустой"}>
+            Профиль в системе
+          </Cell>
+          <Cell subtitle="Завершено задач" after={String(authUser.profile?.completedTasksCount ?? 0)}>
+            Рейтинг
+          </Cell>
         </List>
       </Section>
     );
@@ -725,7 +829,7 @@ function App() {
     <>
       <Section
         header="Лента задач"
-        footer="Фильтры применяются кнопкой «Применить фильтры»."
+        footer="Выбери фильтры и нажми «Применить», чтобы обновить список."
       >
         <div className="form-grid">
           <Input
@@ -760,29 +864,40 @@ function App() {
               setFilterDraft((prev) => ({ ...prev, budgetMax: event.target.value }))
             }
           />
-          <Input
-            header="Статус"
-            placeholder="OPEN / CANCELED"
-            value={filterDraft.status}
-            onChange={(event) =>
-              setFilterDraft((prev) => ({
-                ...prev,
-                status: (event.target.value.toUpperCase() as TaskFilters["status"]),
-              }))
-            }
-          />
-          <Input
-            header="Сортировка"
-            placeholder="new | budget | budget_asc | budget_desc"
-            value={filterDraft.sort}
-            onChange={(event) =>
-              setFilterDraft((prev) => ({
-                ...prev,
-                sort: event.target.value as TaskFilters["sort"],
-              }))
-            }
-          />
         </div>
+
+        <p className="form-label">Статус</p>
+        <div className="chip-row">
+          {STATUS_OPTIONS.map((statusOption) => (
+            <Button
+              key={statusOption.value}
+              size="s"
+              mode={filterDraft.status === statusOption.value ? "filled" : "outline"}
+              onClick={() =>
+                setFilterDraft((prev) => ({ ...prev, status: statusOption.value }))
+              }
+            >
+              {statusOption.label}
+            </Button>
+          ))}
+        </div>
+
+        <p className="form-label">Сортировка</p>
+        <div className="chip-row">
+          {SORT_OPTIONS.map((sortOption) => (
+            <Button
+              key={sortOption.value}
+              size="s"
+              mode={filterDraft.sort === sortOption.value ? "filled" : "outline"}
+              onClick={() =>
+                setFilterDraft((prev) => ({ ...prev, sort: sortOption.value }))
+              }
+            >
+              {sortOption.label}
+            </Button>
+          ))}
+        </div>
+
         <div className="row-actions">
           <Button size="m" mode="filled" onClick={handleApplyFilters}>
             Применить фильтры
@@ -790,11 +905,7 @@ function App() {
           <Button size="m" mode="outline" onClick={handleResetFilters}>
             Сбросить
           </Button>
-          <Button
-            size="m"
-            mode="bezeled"
-            onClick={() => setView({ screen: "create" })}
-          >
+          <Button size="m" mode="bezeled" onClick={() => switchTab("create")}>
             Создать задачу
           </Button>
         </div>
@@ -810,7 +921,7 @@ function App() {
           <Placeholder header="Ошибка" description={listError} />
         ) : tasks.length === 0 ? (
           <Placeholder
-            header="Пусто"
+            header="Пока пусто"
             description="По текущим фильтрам задач не найдено"
           />
         ) : (
@@ -818,8 +929,8 @@ function App() {
             {tasks.map((task) => (
               <Cell
                 key={task.id}
-                subtitle={`${task.category} • ${task.status}`}
-                description={task.description}
+                subtitle={`${task.category} • ${getStatusLabel(task.status)}`}
+                description={`${trimText(task.description)} • Дедлайн: ${formatDate(task.deadlineAt)}`}
                 after={formatMoney(task.budget)}
                 onClick={() => openTaskDetail(task.id)}
               >
@@ -852,7 +963,10 @@ function App() {
   );
 
   const renderCreateTask = (): JSX.Element => (
-    <Section header="Создание задачи" footer="После создания откроется карточка задачи.">
+    <Section
+      header="Новая задача"
+      footer="После публикации откроется карточка задачи, где можно отредактировать детали."
+    >
       <div className="form-grid">
         <Input
           header="Заголовок"
@@ -916,9 +1030,9 @@ function App() {
             void handleCreateTask();
           }}
         >
-          {createPending ? "Создаем..." : "Создать задачу"}
+          {createPending ? "Публикуем..." : "Опубликовать задачу"}
         </Button>
-        <Button mode="outline" size="l" onClick={() => setView({ screen: "list" })}>
+        <Button mode="outline" size="l" onClick={() => switchTab("list")}>
           Назад к ленте
         </Button>
       </div>
@@ -962,7 +1076,7 @@ function App() {
           )}`}
         >
           <List>
-            <Cell subtitle="Статус" after={detailTask.status}>
+            <Cell subtitle="Статус" after={getStatusLabel(detailTask.status)}>
               Статус задачи
             </Cell>
             <Cell subtitle="Категория" after={detailTask.category}>
@@ -980,7 +1094,7 @@ function App() {
           </List>
 
           <div className="row-actions">
-            <Button mode="outline" onClick={() => setView({ screen: "list" })}>
+            <Button mode="outline" onClick={() => switchTab("list")}>
               К ленте
             </Button>
             {canEdit ? (
@@ -997,7 +1111,10 @@ function App() {
         </Section>
 
         {editMode ? (
-          <Section header="Редактирование" footer="Изменять можно только задачи в статусе OPEN.">
+          <Section
+            header="Редактирование"
+            footer="Изменять можно только задачи в статусе «Открыта»."
+          >
             <div className="form-grid">
               <Input
                 header="Заголовок"
@@ -1077,32 +1194,57 @@ function App() {
     <AppRoot appearance={webAppState.appearance} platform={webAppState.uiPlatform}>
       <main className="app-shell">
         <Section>
-          <Placeholder
-            header="TG Freelance"
-            description="MVP: лента задач, создание задачи и карточка с редактированием."
-            action={
-              <div className="row-actions">
-                <Button mode="filled" onClick={() => setView({ screen: "list" })}>
-                  Лента
-                </Button>
-                <Button mode="bezeled" onClick={() => setView({ screen: "create" })}>
-                  Создать
-                </Button>
-              </div>
-            }
-          >
-            <Avatar size={96} acronym={profileAcronym} />
-          </Placeholder>
+          <div className="app-head">
+            <Avatar size={48} acronym={profileAcronym} />
+            <div>
+              <p className="app-title">TG Freelance</p>
+              <p className="app-subtitle">
+                {authUser ? `Вы вошли как ${authUser.displayName}` : "Подключение аккаунта..."}
+              </p>
+            </div>
+          </div>
+
+          <div className="tab-row">
+            <Button
+              mode={activeTab === "list" ? "filled" : "outline"}
+              size="m"
+              onClick={() => switchTab("list")}
+            >
+              Лента
+            </Button>
+            <Button
+              mode={activeTab === "create" ? "filled" : "outline"}
+              size="m"
+              onClick={() => switchTab("create")}
+            >
+              Создать
+            </Button>
+            <Button
+              mode={activeTab === "profile" ? "filled" : "outline"}
+              size="m"
+              onClick={() => switchTab("profile")}
+            >
+              Профиль
+            </Button>
+          </div>
+
+          {view.screen === "detail" && detailTask ? (
+            <p className="inline-hint">
+              Сейчас открыт просмотр задачи «{trimText(detailTask.title, 40)}»
+            </p>
+          ) : null}
         </Section>
 
-        {renderAuthBlock()}
+        {renderAuthState()}
 
         {isAuthenticated && authUser
           ? view.screen === "list"
             ? renderTasksList()
             : view.screen === "create"
               ? renderCreateTask()
-              : renderDetailTask()
+              : view.screen === "profile"
+                ? renderProfile()
+                : renderDetailTask()
           : null}
       </main>
     </AppRoot>
