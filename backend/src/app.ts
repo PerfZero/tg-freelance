@@ -9,6 +9,7 @@ import { requestLoggerMiddleware } from "./common/request-logger";
 import { authRouter } from "./modules/auth/auth.routes";
 import { healthRouter } from "./modules/health/health.routes";
 import { profileRouter } from "./modules/profile/profile.routes";
+import { proposalsRouter } from "./modules/proposals/proposals.routes";
 import { rootRouter } from "./modules/root/root.routes";
 import { tasksRouter } from "./modules/tasks/tasks.routes";
 
@@ -26,6 +27,7 @@ export const createApp = () => {
   app.use("/auth", authRouter);
   app.use("/profile", profileRouter);
   app.use("/tasks", tasksRouter);
+  app.use("/proposals", proposalsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

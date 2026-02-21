@@ -632,6 +632,62 @@ tasksRouter.post("/:id/proposals", requireAuth, async (req, res, next) => {
   }
 });
 
+tasksRouter.get("/:id/proposals", requireAuth, async (req, res, next) => {
+  try {
+    const taskId = parseTaskIdOrThrow(req.params.id);
+    const authUser = getAuthUser(res);
+
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: {
+        id: true,
+        customerId: true,
+      },
+    });
+
+    if (!task) {
+      throw new HttpError(404, "NOT_FOUND", "Task not found");
+    }
+
+    const isTaskOwner = task.customerId === authUser.id;
+
+    if (!isTaskOwner) {
+      const ownProposal = await prisma.proposal.findFirst({
+        where: {
+          taskId,
+          executorId: authUser.id,
+        },
+        select: proposalSelect,
+      });
+
+      if (!ownProposal) {
+        throw new HttpError(
+          403,
+          "FORBIDDEN",
+          "Only task owner or proposal author can view proposals",
+        );
+      }
+
+      res.status(200).json({
+        items: [mapProposal(ownProposal)],
+      });
+      return;
+    }
+
+    const proposals = await prisma.proposal.findMany({
+      where: { taskId },
+      orderBy: { createdAt: "desc" },
+      select: proposalSelect,
+    });
+
+    res.status(200).json({
+      items: proposals.map(mapProposal),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 tasksRouter.get("/:id", requireAuth, async (req, res, next) => {
   try {
     const taskId = parseTaskIdOrThrow(req.params.id);

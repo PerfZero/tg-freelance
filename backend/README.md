@@ -91,6 +91,23 @@ npm run prisma:studio
     - на задачу можно оставить только один отклик от исполнителя
     - отклики доступны только для задач в статусе `OPEN`
     - после выбора исполнителя новые отклики запрещены
+- `GET /tasks/:id/proposals`
+  - header: `Authorization: Bearer <token>`
+  - права:
+    - владелец задачи видит все отклики
+    - исполнитель видит только свой отклик на задачу
+
+## Proposals API
+
+- `PATCH /proposals/:id`
+  - header: `Authorization: Bearer <token>`
+  - only proposal author
+  - body: any subset of `price`, `comment`, `eta_days`
+  - разрешено только пока задача в `OPEN` и исполнитель еще не выбран
+- `DELETE /proposals/:id`
+  - header: `Authorization: Bearer <token>`
+  - only proposal author
+  - разрешено только пока задача в `OPEN` и исполнитель еще не выбран
 
 ## Ошибки и логирование
 
