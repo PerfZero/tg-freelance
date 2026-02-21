@@ -109,15 +109,38 @@ function App() {
   const detailTaskId = taskMatch?.params.taskId ?? null;
   const profileUserId = userMatch?.params.userId ?? null;
 
+  const readTokenFromLocation = (): string | null => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    const searchToken = new URLSearchParams(window.location.search).get(
+      "token",
+    );
+    if (searchToken && searchToken.trim().length > 0) {
+      return searchToken;
+    }
+
+    const hashRaw = window.location.hash.startsWith("#")
+      ? window.location.hash.slice(1)
+      : window.location.hash;
+    const hashToken = new URLSearchParams(hashRaw).get("token");
+    if (hashToken && hashToken.trim().length > 0) {
+      return hashToken;
+    }
+
+    return null;
+  };
+
   const [token, setToken] = useState<string | null>(() => {
     if (typeof window === "undefined") {
       return null;
     }
 
-    const queryToken = new URLSearchParams(window.location.search).get("token");
-    if (queryToken && queryToken.trim().length > 0) {
-      window.localStorage.setItem(TOKEN_KEY, queryToken);
-      return queryToken;
+    const locationToken = readTokenFromLocation();
+    if (locationToken) {
+      window.localStorage.setItem(TOKEN_KEY, locationToken);
+      return locationToken;
     }
 
     return window.localStorage.getItem(TOKEN_KEY);
@@ -711,14 +734,22 @@ function App() {
   }, [location.pathname]);
 
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    if (!params.has("token")) {
+    const searchParams = new URLSearchParams(location.search);
+    const hashRaw = location.hash.startsWith("#")
+      ? location.hash.slice(1)
+      : location.hash;
+    const hashParams = new URLSearchParams(hashRaw);
+
+    if (!searchParams.has("token") && !hashParams.has("token")) {
       return;
     }
 
-    params.delete("token");
-    const nextSearch = params.toString();
-    const nextUrl = `${location.pathname}${nextSearch ? `?${nextSearch}` : ""}${location.hash}`;
+    searchParams.delete("token");
+    hashParams.delete("token");
+
+    const nextSearch = searchParams.toString();
+    const nextHash = hashParams.toString();
+    const nextUrl = `${location.pathname}${nextSearch ? `?${nextSearch}` : ""}${nextHash ? `#${nextHash}` : ""}`;
 
     navigate(nextUrl, { replace: true });
   }, [location.hash, location.pathname, location.search, navigate]);
@@ -1860,7 +1891,7 @@ function App() {
       return;
     }
 
-    const webAdminUrl = `${window.location.origin}/admin?token=${encodeURIComponent(token)}`;
+    const webAdminUrl = `${window.location.origin}/admin#token=${encodeURIComponent(token)}`;
     const telegramWebApp = (
       window as Window & {
         Telegram?: {
