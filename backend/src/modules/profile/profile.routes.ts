@@ -12,12 +12,14 @@ type ProfilePatchPayload = {
   about?: unknown;
   skills?: unknown;
   primary_role?: unknown;
+  custom_avatar_data_url?: unknown;
 };
 
 const MAX_DISPLAY_NAME_LENGTH = 80;
 const MAX_ABOUT_LENGTH = 2000;
 const MAX_SKILLS = 30;
 const MAX_SKILL_LENGTH = 40;
+const MAX_CUSTOM_AVATAR_DATA_URL_LENGTH = 1_500_000;
 const PRIMARY_ROLES = ["CUSTOMER", "EXECUTOR"] as const;
 type PrimaryRoleValue = (typeof PRIMARY_ROLES)[number];
 
@@ -145,6 +147,43 @@ const parsePrimaryRole = (
   };
 };
 
+const CUSTOM_AVATAR_DATA_URL_PATTERN =
+  /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=]+$/i;
+
+const parseCustomAvatarDataUrl = (
+  value: unknown,
+): { provided: boolean; normalized?: string | null } => {
+  if (value === undefined) {
+    return { provided: false };
+  }
+
+  if (value === null) {
+    return { provided: true, normalized: null };
+  }
+
+  assertValidation(
+    typeof value === "string",
+    "custom_avatar_data_url must be a string or null",
+  );
+
+  const normalized = normalizeString(value as string);
+
+  assertValidation(
+    normalized.length <= MAX_CUSTOM_AVATAR_DATA_URL_LENGTH,
+    `custom_avatar_data_url must be at most ${MAX_CUSTOM_AVATAR_DATA_URL_LENGTH} characters`,
+  );
+
+  assertValidation(
+    CUSTOM_AVATAR_DATA_URL_PATTERN.test(normalized),
+    "custom_avatar_data_url must be a valid image data URL",
+  );
+
+  return {
+    provided: true,
+    normalized,
+  };
+};
+
 const getUserById = async (userId: string): Promise<UserWithProfile> => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -166,12 +205,16 @@ const patchProfile = async (
   const parsedAbout = parseAbout(payload.about);
   const parsedSkills = parseSkills(payload.skills);
   const parsedPrimaryRole = parsePrimaryRole(payload.primary_role);
+  const parsedCustomAvatarDataUrl = parseCustomAvatarDataUrl(
+    payload.custom_avatar_data_url,
+  );
 
   const hasUpdates =
     parsedDisplayName.provided ||
     parsedAbout.provided ||
     parsedSkills.provided ||
-    parsedPrimaryRole.provided;
+    parsedPrimaryRole.provided ||
+    parsedCustomAvatarDataUrl.provided;
 
   assertValidation(hasUpdates, "No valid fields to update");
 
@@ -187,7 +230,8 @@ const patchProfile = async (
   if (
     parsedAbout.provided ||
     parsedSkills.provided ||
-    parsedPrimaryRole.provided
+    parsedPrimaryRole.provided ||
+    parsedCustomAvatarDataUrl.provided
   ) {
     await prisma.profile.upsert({
       where: { userId },
@@ -197,6 +241,9 @@ const patchProfile = async (
         ...(parsedPrimaryRole.provided
           ? { primaryRole: parsedPrimaryRole.normalized }
           : {}),
+        ...(parsedCustomAvatarDataUrl.provided
+          ? { customAvatarDataUrl: parsedCustomAvatarDataUrl.normalized }
+          : {}),
       },
       create: {
         userId,
@@ -204,6 +251,9 @@ const patchProfile = async (
         skills: parsedSkills.provided ? (parsedSkills.normalized ?? []) : [],
         primaryRole: parsedPrimaryRole.provided
           ? parsedPrimaryRole.normalized
+          : null,
+        customAvatarDataUrl: parsedCustomAvatarDataUrl.provided
+          ? parsedCustomAvatarDataUrl.normalized
           : null,
       },
     });

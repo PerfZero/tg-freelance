@@ -101,6 +101,8 @@ const proposalSelect = {
         select: {
           about: true,
           skills: true,
+          telegramAvatarUrl: true,
+          customAvatarDataUrl: true,
           rating: true,
           completedTasksCount: true,
         },
@@ -406,6 +408,10 @@ const mapProposal = (proposal: ProposalView) => ({
           ? {
               about: proposal.executor.profile.about,
               skills: proposal.executor.profile.skills,
+              avatarUrl:
+                proposal.executor.profile.customAvatarDataUrl ??
+                proposal.executor.profile.telegramAvatarUrl ??
+                null,
               rating: Number(proposal.executor.profile.rating.toString()),
               completedTasksCount:
                 proposal.executor.profile.completedTasksCount,

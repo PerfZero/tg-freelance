@@ -46,13 +46,26 @@ const getInitDataFromBody = (body: unknown): string => {
   return payload.initData as string;
 };
 
-const ensureProfile = async (userId: string): Promise<void> => {
+const ensureProfile = async (
+  userId: string,
+  telegramAvatarUrl?: string | null,
+): Promise<void> => {
+  const normalizedTelegramAvatarUrl =
+    typeof telegramAvatarUrl === "string" && telegramAvatarUrl.trim().length > 0
+      ? telegramAvatarUrl.trim()
+      : null;
+
   await prisma.profile.upsert({
     where: { userId },
-    update: {},
+    update: {
+      ...(telegramAvatarUrl !== undefined
+        ? { telegramAvatarUrl: normalizedTelegramAvatarUrl }
+        : {}),
+    },
     create: {
       userId,
       skills: [],
+      telegramAvatarUrl: normalizedTelegramAvatarUrl,
     },
   });
 };
@@ -115,7 +128,7 @@ authRouter.post("/telegram", async (req, res, next) => {
       },
     });
 
-    await ensureProfile(user.id);
+    await ensureProfile(user.id, telegramUser.photo_url ?? undefined);
 
     const hydratedUser = await getUserWithProfile(user.id);
     const token = signAuthToken({

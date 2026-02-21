@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type ChangeEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import WebApp from "@twa-dev/sdk";
 import {
   ArrowLeft,
@@ -65,6 +72,8 @@ type PublicUser = {
   profile: {
     about: string | null;
     skills: string[];
+    avatarUrl: string | null;
+    hasCustomAvatar: boolean;
     rating: number;
     completedTasksCount: number;
   } | null;
@@ -151,6 +160,7 @@ type ProposalItem = {
     profile: {
       about: string | null;
       skills: string[];
+      avatarUrl: string | null;
       rating: number;
       completedTasksCount: number;
     } | null;
@@ -444,6 +454,28 @@ const trimText = (value: string, max = 130): string => {
   return `${prepared.slice(0, max)}...`;
 };
 
+const MAX_AVATAR_FILE_SIZE = 2 * 1024 * 1024;
+
+const readFileAsDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        reject(new Error("Не удалось прочитать файл"));
+        return;
+      }
+
+      resolve(reader.result);
+    };
+
+    reader.onerror = () => {
+      reject(new Error("Не удалось прочитать файл"));
+    };
+
+    reader.readAsDataURL(file);
+  });
+
 const getPreferredTabByRole = (role: PrimaryRoleValue | null): TabState =>
   role === "CUSTOMER" ? "create" : "list";
 
@@ -551,6 +583,9 @@ function App() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [roleSavePending, setRoleSavePending] = useState(false);
   const [roleSaveError, setRoleSaveError] = useState<string | null>(null);
+  const [avatarSavePending, setAvatarSavePending] = useState(false);
+  const [avatarSaveError, setAvatarSaveError] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   const [filterDraft, setFilterDraft] = useState<TaskFilters>(DEFAULT_FILTERS);
   const [filterApplied, setFilterApplied] =
@@ -1641,6 +1676,66 @@ function App() {
     }
   };
 
+  const saveCustomAvatar = async (dataUrl: string | null): Promise<void> => {
+    if (!token) {
+      return;
+    }
+
+    try {
+      setAvatarSavePending(true);
+      setAvatarSaveError(null);
+
+      const response = await apiRequest<{ user: PublicUser }>(
+        "/profile/me",
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            custom_avatar_data_url: dataUrl,
+          }),
+        },
+        token,
+      );
+
+      setAuthUser(response.user);
+    } catch (error) {
+      setAvatarSaveError(
+        error instanceof Error ? error.message : "Не удалось обновить фото",
+      );
+    } finally {
+      setAvatarSavePending(false);
+    }
+  };
+
+  const handleAvatarInputChange = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ): Promise<void> => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setAvatarSaveError("Можно загрузить только изображение");
+      return;
+    }
+
+    if (file.size > MAX_AVATAR_FILE_SIZE) {
+      setAvatarSaveError("Файл слишком большой. Максимум 2 МБ.");
+      return;
+    }
+
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      await saveCustomAvatar(dataUrl);
+    } catch (error) {
+      setAvatarSaveError(
+        error instanceof Error ? error.message : "Не удалось обработать файл",
+      );
+    }
+  };
+
   const renderRoleOnboarding = (): JSX.Element => (
     <Section
       header="Стартовый режим"
@@ -1702,7 +1797,13 @@ function App() {
         >
           <List>
             <Cell
-              before={<Avatar size={48} acronym={profileAcronym} />}
+              before={
+                <Avatar
+                  size={48}
+                  acronym={profileAcronym}
+                  imageUrl={authUser.profile?.avatarUrl ?? null}
+                />
+              }
               subtitle="Telegram-пользователь"
               description={
                 webAppState.isTelegram
@@ -1725,6 +1826,43 @@ function App() {
               Рейтинг
             </Cell>
           </List>
+
+          <input
+            ref={avatarInputRef}
+            className="visually-hidden-input"
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            onChange={(event) => {
+              void handleAvatarInputChange(event);
+            }}
+          />
+
+          <div className="row-actions row-actions-tight">
+            <Button
+              mode="bezeled"
+              size="m"
+              disabled={avatarSavePending}
+              onClick={() => {
+                avatarInputRef.current?.click();
+              }}
+            >
+              {avatarSavePending ? "Загружаем..." : "Загрузить фото"}
+            </Button>
+            <Button
+              mode="outline"
+              size="m"
+              disabled={avatarSavePending || !authUser.profile?.hasCustomAvatar}
+              onClick={() => {
+                void saveCustomAvatar(null);
+              }}
+            >
+              Сбросить фото
+            </Button>
+          </div>
+
+          {avatarSaveError ? (
+            <p className="error-text">{avatarSaveError}</p>
+          ) : null}
         </Section>
 
         <Section
@@ -1888,7 +2026,13 @@ function App() {
         >
           <List>
             <Cell
-              before={<Avatar size={48} acronym={publicAcronym} />}
+              before={
+                <Avatar
+                  size={48}
+                  acronym={publicAcronym}
+                  imageUrl={publicProfile?.avatarUrl ?? null}
+                />
+              }
               subtitle="Пользователь платформы"
               description={`Приоритет: ${toRoleLabel(publicProfileUser.primaryRole)}`}
             >
@@ -2299,7 +2443,11 @@ function App() {
                 return (
                   <div key={proposal.id} className="proposal-card">
                     <div className="proposal-head">
-                      <Avatar size={36} acronym={executorAcronym} />
+                      <Avatar
+                        size={36}
+                        acronym={executorAcronym}
+                        imageUrl={executorProfile?.avatarUrl ?? null}
+                      />
                       <div className="proposal-head-main">
                         <p className="proposal-title">
                           {proposal.executor?.displayName ?? "Исполнитель"}

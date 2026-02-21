@@ -53,6 +53,8 @@ model Profile {
   about               String?
   skills              String[]
   primaryRole         ProfilePrimaryRole? @map("primary_role")
+  telegramAvatarUrl   String?  @map("telegram_avatar_url")
+  customAvatarDataUrl String?  @map("custom_avatar_data_url")
   rating              Decimal  @default(0) @db.Decimal(3, 2)
   completedTasksCount Int      @default(0) @map("completed_tasks_count")
   user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -12,6 +12,7 @@ export type TelegramInitDataUser = {
   first_name: string;
   last_name?: string;
   username?: string;
+  photo_url?: string;
   language_code?: string;
   is_premium?: boolean;
 };
@@ -34,7 +35,10 @@ const toSecretKey = (botToken: string): Buffer =>
 
 const isValidHash = (value: string): boolean => /^[a-f0-9]{64}$/i.test(value);
 
-const isSignatureValid = (providedHash: string, computedHash: string): boolean => {
+const isSignatureValid = (
+  providedHash: string,
+  computedHash: string,
+): boolean => {
   if (!isValidHash(providedHash) || !isValidHash(computedHash)) {
     return false;
   }
@@ -60,36 +64,58 @@ const parseUser = (rawValue: string): TelegramInitDataUser => {
 
   assertValidation(
     typeof parsed === "object" && parsed !== null && !Array.isArray(parsed),
-    "initData user must be an object"
+    "initData user must be an object",
   );
 
   const user = parsed as Partial<TelegramInitDataUser>;
 
   assertValidation(
     typeof user.id === "number" && Number.isInteger(user.id) && user.id > 0,
-    "initData user id is invalid"
+    "initData user id is invalid",
   );
   assertValidation(
     typeof user.first_name === "string" && user.first_name.trim().length > 0,
-    "initData user first_name is required"
+    "initData user first_name is required",
   );
 
   if (user.last_name !== undefined) {
-    assertValidation(typeof user.last_name === "string", "initData user last_name must be a string");
+    assertValidation(
+      typeof user.last_name === "string",
+      "initData user last_name must be a string",
+    );
   }
 
   if (user.username !== undefined) {
-    assertValidation(typeof user.username === "string", "initData user username must be a string");
+    assertValidation(
+      typeof user.username === "string",
+      "initData user username must be a string",
+    );
+  }
+
+  if (user.photo_url !== undefined) {
+    assertValidation(
+      typeof user.photo_url === "string",
+      "initData user photo_url must be a string",
+    );
   }
 
   return user as TelegramInitDataUser;
 };
 
-export const verifyTelegramInitData = (initData: string): VerifiedTelegramInitData => {
-  assertValidation(typeof initData === "string" && initData.trim().length > 0, "initData is required");
+export const verifyTelegramInitData = (
+  initData: string,
+): VerifiedTelegramInitData => {
+  assertValidation(
+    typeof initData === "string" && initData.trim().length > 0,
+    "initData is required",
+  );
 
   if (!env.telegramBotToken) {
-    throw new HttpError(500, "INTERNAL_ERROR", "Telegram bot token is not configured");
+    throw new HttpError(
+      500,
+      "INTERNAL_ERROR",
+      "Telegram bot token is not configured",
+    );
   }
 
   const params = new URLSearchParams(initData);
@@ -120,7 +146,7 @@ export const verifyTelegramInitData = (initData: string): VerifiedTelegramInitDa
   const now = Math.floor(Date.now() / 1000);
   if (now - authDate > MAX_AUTH_AGE_SECONDS) {
     throw new HttpError(401, "UNAUTHORIZED", "initData is expired", {
-      maxAgeSeconds: MAX_AUTH_AGE_SECONDS
+      maxAgeSeconds: MAX_AUTH_AGE_SECONDS,
     });
   }
 
@@ -139,6 +165,6 @@ export const verifyTelegramInitData = (initData: string): VerifiedTelegramInitDa
     authDate,
     queryId: params.get("query_id") ?? undefined,
     startParam: params.get("start_param") ?? undefined,
-    user
+    user,
   };
 };

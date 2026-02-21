@@ -7,6 +7,8 @@ export type UserWithProfile = User & {
 export type PublicProfile = {
   about: string | null;
   skills: string[];
+  avatarUrl: string | null;
+  hasCustomAvatar: boolean;
   rating: number;
   completedTasksCount: number;
 };

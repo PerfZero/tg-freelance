@@ -19,9 +19,11 @@ export const AppRoot = ({
 export const Avatar = ({
   size,
   acronym,
+  imageUrl,
 }: {
   size: number;
   acronym: string;
+  imageUrl?: string | null;
 }): JSX.Element => (
   <div
     className="ui-avatar"
@@ -31,7 +33,11 @@ export const Avatar = ({
       fontSize: `${Math.max(Math.floor(size / 2.7), 12)}px`,
     }}
   >
-    {acronym}
+    {imageUrl ? (
+      <img className="ui-avatar-image" src={imageUrl} alt={acronym} />
+    ) : (
+      acronym
+    )}
   </div>
 );
 
@@ -101,7 +107,9 @@ export const Cell = ({
       <div className="ui-cell-main">
         <div className="ui-cell-title">{children}</div>
         {subtitle ? <div className="ui-cell-subtitle">{subtitle}</div> : null}
-        {description ? <div className="ui-cell-description">{description}</div> : null}
+        {description ? (
+          <div className="ui-cell-description">{description}</div>
+        ) : null}
       </div>
       {after ? <div className="ui-cell-after">{after}</div> : null}
     </>
@@ -109,7 +117,11 @@ export const Cell = ({
 
   if (onClick) {
     return (
-      <button className="ui-cell ui-cell-clickable" onClick={onClick} type="button">
+      <button
+        className="ui-cell ui-cell-clickable"
+        onClick={onClick}
+        type="button"
+      >
         {content}
       </button>
     );
@@ -152,6 +164,8 @@ export const Placeholder = ({
 }): JSX.Element => (
   <div className="ui-placeholder">
     <p className="ui-placeholder-title">{header}</p>
-    {description ? <p className="ui-placeholder-description">{description}</p> : null}
+    {description ? (
+      <p className="ui-placeholder-description">{description}</p>
+    ) : null}
   </div>
 );

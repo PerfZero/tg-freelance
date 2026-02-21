@@ -1,5 +1,10 @@
 import type { PublicUser, UserWithProfile } from "./auth.types";
 
+const resolveAvatarUrl = (
+  customAvatarDataUrl: string | null,
+  telegramAvatarUrl: string | null,
+): string | null => customAvatarDataUrl ?? telegramAvatarUrl ?? null;
+
 export const mapPublicUser = (user: UserWithProfile): PublicUser => ({
   id: user.id,
   telegramId: user.telegramId.toString(),
@@ -14,6 +19,11 @@ export const mapPublicUser = (user: UserWithProfile): PublicUser => ({
     ? {
         about: user.profile.about,
         skills: user.profile.skills,
+        avatarUrl: resolveAvatarUrl(
+          user.profile.customAvatarDataUrl,
+          user.profile.telegramAvatarUrl,
+        ),
+        hasCustomAvatar: Boolean(user.profile.customAvatarDataUrl),
         rating: Number(user.profile.rating.toString()),
         completedTasksCount: user.profile.completedTasksCount,
       }

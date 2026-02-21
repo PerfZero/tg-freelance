@@ -60,6 +60,14 @@
     letter-spacing: 0.3px;
     color: var(--tg-theme-button-text-color, #fff);
     background: linear-gradient(140deg, #3ca5ff 0%, #1f7bff 100%);
+    overflow: hidden;
+}
+
+.ui-avatar-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
 }
 
 .ui-btn {
@@ -657,4 +665,12 @@
     margin: 2px 0 0;
     color: var(--tg-theme-destructive-text-color, #cc4b4b);
     font-size: 14px;
+}
+
+.visually-hidden-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
 }
