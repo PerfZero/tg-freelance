@@ -560,7 +560,11 @@ const trimText = (value: string, max = 130): string => {
   return `${prepared.slice(0, max)}...`;
 };
 
+const shouldClampTaskDescription = (value: string): boolean =>
+  value.trim().length > MAX_TASK_DESCRIPTION_PREVIEW_CHARS;
+
 const MAX_AVATAR_FILE_SIZE = 2 * 1024 * 1024;
+const MAX_TASK_DESCRIPTION_PREVIEW_CHARS = 180;
 
 const readFileAsDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -722,6 +726,11 @@ function App() {
   const [detailTask, setDetailTask] = useState<TaskItem | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [expandedFeedDescriptions, setExpandedFeedDescriptions] = useState<
+    Record<string, boolean>
+  >({});
+  const [expandedDetailDescription, setExpandedDetailDescription] =
+    useState(false);
   const [statusHistory, setStatusHistory] = useState<TaskStatusHistoryItem[]>(
     [],
   );
@@ -1068,6 +1077,7 @@ function App() {
 
         setTasks(response.items);
         setPagination(response.pagination);
+        setExpandedFeedDescriptions({});
       } catch (error) {
         if (!active) {
           return;
@@ -1095,6 +1105,7 @@ function App() {
   useEffect(() => {
     setDetailTask(null);
     setDetailError(null);
+    setExpandedDetailDescription(false);
     setStatusHistory([]);
     setStatusHistoryLoading(false);
     setStatusHistoryError(null);
@@ -1312,6 +1323,13 @@ function App() {
 
   const openTaskDetail = (taskId: string): void => {
     navigate(`/task/${taskId}`);
+  };
+
+  const toggleFeedDescription = (taskId: string): void => {
+    setExpandedFeedDescriptions((prev) => ({
+      ...prev,
+      [taskId]: !prev[taskId],
+    }));
   };
 
   const openUserProfile = (userId: string): void => {
@@ -2594,19 +2612,79 @@ function App() {
               description="По текущим фильтрам задач не найдено"
             />
           ) : (
-            <List>
-              {tasks.map((task) => (
-                <Cell
-                  key={task.id}
-                  subtitle={`${task.category} • ${getStatusLabel(task.status)}`}
-                  description={`${trimText(task.description, 96)} • Дедлайн: ${formatDate(task.deadlineAt)}`}
-                  after={formatMoney(task.budget)}
-                  onClick={() => openTaskDetail(task.id)}
-                >
-                  {task.title}
-                </Cell>
-              ))}
-            </List>
+            <div className="task-feed-list">
+              {tasks.map((task) => {
+                const isExpanded = Boolean(expandedFeedDescriptions[task.id]);
+                const canClamp = shouldClampTaskDescription(task.description);
+                const previewDescription =
+                  canClamp && !isExpanded
+                    ? trimText(
+                        task.description,
+                        MAX_TASK_DESCRIPTION_PREVIEW_CHARS,
+                      )
+                    : task.description;
+
+                return (
+                  <article key={task.id} className="task-feed-card">
+                    <div className="task-feed-card-head">
+                      <h3 className="task-feed-card-title">{task.title}</h3>
+                      <p className="task-feed-card-budget">
+                        {formatMoney(task.budget)}
+                      </p>
+                    </div>
+
+                    <div className="task-feed-meta-row">
+                      <span className="task-feed-meta-chip">
+                        {getStatusLabel(task.status)}
+                      </span>
+                      <span className="task-feed-meta-chip">
+                        {formatDate(task.deadlineAt)}
+                      </span>
+                    </div>
+
+                    <div className="task-feed-meta-row">
+                      <span className="task-feed-meta-chip">
+                        {task.category}
+                      </span>
+                      {task.tags.slice(0, 3).map((tag) => (
+                        <span
+                          key={`${task.id}-${tag}`}
+                          className="task-feed-meta-chip"
+                        >
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+
+                    <p className="task-feed-description">
+                      {previewDescription}
+                    </p>
+
+                    {canClamp ? (
+                      <div className="task-feed-readmore-row">
+                        <Button
+                          mode="outline"
+                          size="s"
+                          onClick={() => toggleFeedDescription(task.id)}
+                        >
+                          {isExpanded ? "Скрыть" : "Показать еще"}
+                        </Button>
+                      </div>
+                    ) : null}
+
+                    <div className="task-feed-actions">
+                      <Button
+                        mode="bezeled"
+                        size="m"
+                        onClick={() => openTaskDetail(task.id)}
+                      >
+                        Открыть задачу
+                      </Button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           )}
 
           <div className="row-actions row-actions-tight">
@@ -3057,51 +3135,87 @@ function App() {
     const canApproveOrReject =
       isDetailOwner && detailTask.status === "ON_REVIEW";
     const detailCustomer = detailTask.customer;
+    const canClampDetailDescription = shouldClampTaskDescription(
+      detailTask.description,
+    );
 
     return (
       <>
         <Section
-          header={detailTask.title}
+          header="Карточка задачи"
           footer={`Создано: ${formatDate(detailTask.createdAt)} • Дедлайн: ${formatDate(
             detailTask.deadlineAt,
           )}`}
         >
-          <List>
-            <Cell subtitle="Статус" after={getStatusLabel(detailTask.status)}>
-              Статус задачи
-            </Cell>
-            {detailCustomer ? (
-              <Cell
-                subtitle="Заказчик"
-                description="Публичный профиль"
-                after="Открыть"
+          <div className="task-detail-head">
+            <h2 className="task-detail-title">{detailTask.title}</h2>
+            <p className="task-detail-budget">
+              {formatMoney(detailTask.budget)}
+            </p>
+          </div>
+
+          <div className="task-detail-meta-row">
+            <span className="task-feed-meta-chip">
+              {getStatusLabel(detailTask.status)}
+            </span>
+            <span className="task-feed-meta-chip">
+              {formatDate(detailTask.deadlineAt)}
+            </span>
+            <span className="task-feed-meta-chip">{detailTask.category}</span>
+          </div>
+
+          {detailTask.tags.length > 0 ? (
+            <div className="task-detail-meta-row">
+              {detailTask.tags.map((tag) => (
+                <span
+                  key={`${detailTask.id}-${tag}`}
+                  className="task-feed-meta-chip"
+                >
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          {detailCustomer ? (
+            <div className="task-detail-customer-row">
+              <p className="task-detail-customer-text">
+                Заказчик: {detailCustomer.displayName}
+              </p>
+              <Button
+                mode="outline"
+                size="s"
                 onClick={() => openUserProfile(detailCustomer.id)}
               >
-                {detailCustomer.displayName}
-              </Cell>
-            ) : (
-              <Cell subtitle="Заказчик" description="Профиль недоступен">
                 Профиль заказчика
-              </Cell>
-            )}
-            <Cell subtitle="Категория" after={detailTask.category}>
-              Категория
-            </Cell>
-            <Cell subtitle="Бюджет" after={formatMoney(detailTask.budget)}>
-              Стоимость
-            </Cell>
-            <Cell
-              subtitle="Теги"
-              description={detailTask.tags.join(", ") || "-"}
-            >
-              Теги
-            </Cell>
-            <Cell subtitle="Описание" description={detailTask.description}>
-              Детали
-            </Cell>
-          </List>
+              </Button>
+            </div>
+          ) : (
+            <p className="task-detail-customer-text">Заказчик недоступен</p>
+          )}
+        </Section>
 
-          <div className="row-actions">
+        <Section header="Описание">
+          <p
+            className={`task-detail-description ${canClampDetailDescription && !expandedDetailDescription ? "task-detail-description-clamped" : ""}`}
+          >
+            {detailTask.description}
+          </p>
+          {canClampDetailDescription ? (
+            <div className="task-feed-readmore-row">
+              <Button
+                mode="outline"
+                size="s"
+                onClick={() => setExpandedDetailDescription((prev) => !prev)}
+              >
+                {expandedDetailDescription ? "Скрыть" : "Показать еще"}
+              </Button>
+            </div>
+          ) : null}
+        </Section>
+
+        <Section header="Действия">
+          <div className="row-actions row-actions-tight">
             <Button mode="outline" onClick={() => navigate("/feed")}>
               <span className="btn-with-icon">
                 <Home size={16} />
