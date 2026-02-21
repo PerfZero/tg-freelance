@@ -42,6 +42,10 @@ type ProposalCreatePayload = {
   eta_days?: unknown;
 };
 
+type TaskSelectProposalPayload = {
+  proposal_id?: unknown;
+};
+
 const taskSelect = {
   id: true,
   customerId: true,
@@ -288,6 +292,22 @@ const parseRequiredProposalCreate = (body: ProposalCreatePayload) => {
   };
 };
 
+const parseUuidValue = (value: unknown, fieldName: string): string => {
+  assertValidation(
+    typeof value === "string",
+    `${fieldName} must be a valid UUID`,
+  );
+
+  const normalized = value as string;
+  assertValidation(isUuid(normalized), `${fieldName} must be a valid UUID`);
+
+  return normalized;
+};
+
+const parseRequiredTaskSelectProposal = (body: TaskSelectProposalPayload) => ({
+  proposalId: parseUuidValue(body.proposal_id, "proposal_id"),
+});
+
 const mapTask = (task: TaskView) => ({
   id: task.id,
   customerId: task.customerId,
@@ -341,13 +361,7 @@ const getTaskOrThrow = async (taskId: string): Promise<TaskView> => {
 };
 
 const parseTaskIdOrThrow = (id: unknown): string => {
-  assertValidation(typeof id === "string", "id must be a valid UUID");
-
-  const taskId = id as string;
-
-  assertValidation(isUuid(taskId), "id must be a valid UUID");
-
-  return taskId;
+  return parseUuidValue(id, "id");
 };
 
 const parsePage = (value: unknown): number => {
@@ -687,6 +701,124 @@ tasksRouter.get("/:id/proposals", requireAuth, async (req, res, next) => {
     next(error);
   }
 });
+
+tasksRouter.post(
+  "/:id/select-proposal",
+  requireAuth,
+  async (req, res, next) => {
+    try {
+      const taskId = parseTaskIdOrThrow(req.params.id);
+      assertBodyIsObject(req.body);
+
+      const authUser = getAuthUser(res);
+      const payload = parseRequiredTaskSelectProposal(
+        req.body as TaskSelectProposalPayload,
+      );
+
+      let updatedTask: TaskView;
+
+      try {
+        updatedTask = await prisma.$transaction(async (tx) => {
+          const task = await tx.task.findUnique({
+            where: { id: taskId },
+            select: {
+              id: true,
+              customerId: true,
+              status: true,
+              assignment: {
+                select: { id: true },
+              },
+            },
+          });
+
+          if (!task) {
+            throw new HttpError(404, "NOT_FOUND", "Task not found");
+          }
+
+          if (task.customerId !== authUser.id) {
+            throw new HttpError(
+              403,
+              "FORBIDDEN",
+              "Only task owner can select proposal",
+            );
+          }
+
+          assertValidation(
+            task.status === TaskStatus.OPEN,
+            "Only OPEN tasks can select executor",
+          );
+          assertValidation(
+            !task.assignment,
+            "Executor has already been selected for this task",
+          );
+
+          const proposal = await tx.proposal.findUnique({
+            where: { id: payload.proposalId },
+            select: {
+              id: true,
+              taskId: true,
+              executorId: true,
+              assignment: {
+                select: { id: true },
+              },
+            },
+          });
+
+          if (!proposal || proposal.taskId !== taskId) {
+            throw new HttpError(
+              404,
+              "NOT_FOUND",
+              "Proposal not found for this task",
+            );
+          }
+
+          assertValidation(
+            !proposal.assignment,
+            "Proposal has already been selected",
+          );
+
+          await tx.assignment.create({
+            data: {
+              taskId,
+              customerId: authUser.id,
+              executorId: proposal.executorId,
+              selectedProposalId: proposal.id,
+            },
+          });
+
+          return tx.task.update({
+            where: { id: taskId },
+            data: {
+              status: TaskStatus.IN_PROGRESS,
+            },
+            select: taskSelect,
+          });
+        });
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "P2002"
+        ) {
+          throw new HttpError(
+            400,
+            "VALIDATION_ERROR",
+            "Executor has already been selected for this task",
+          );
+        }
+
+        throw error;
+      }
+
+      res.status(200).json({
+        task: mapTask(updatedTask),
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 tasksRouter.get("/:id", requireAuth, async (req, res, next) => {
   try {

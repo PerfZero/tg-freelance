@@ -109,6 +109,19 @@ npm run prisma:studio
   - only proposal author
   - разрешено только пока задача в `OPEN` и исполнитель еще не выбран
 
+## Assignment API
+
+- `POST /tasks/:id/select-proposal`
+  - header: `Authorization: Bearer <token>`
+  - only task owner
+  - body:
+    - `proposal_id: string` (UUID)
+  - ограничения:
+    - задача должна быть в статусе `OPEN`
+    - отклик должен принадлежать этой задаче
+    - выбор исполнителя возможен только один раз
+  - при успехе задача переходит в `IN_PROGRESS`
+
 ## Ошибки и логирование
 
 - Все API-ошибки возвращаются в формате:
