@@ -44,6 +44,12 @@ enum AdminAuditTargetType {
   TASK
 }
 
+enum AppLogLevel {
+  INFO
+  WARN
+  ERROR
+}
+
 model User {
   id                  String              @id @default(uuid()) @db.Uuid
   telegramId          BigInt              @unique @map("telegram_id")
@@ -205,4 +211,16 @@ model AdminAuditLog {
   @@index([targetType, targetId, createdAt])
   @@index([action, createdAt])
   @@map("admin_audit_logs")
+}
+
+model AppLog {
+  id        String      @id @default(uuid()) @db.Uuid
+  level     AppLogLevel
+  message   String
+  context   Json?
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([level, createdAt])
+  @@map("app_logs")
 }

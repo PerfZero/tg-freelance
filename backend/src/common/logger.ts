@@ -1,3 +1,5 @@
+import { persistApplicationLog } from "./app-log.store";
+
 export type LogLevel = "info" | "warn" | "error";
 
 type LogContext = Record<string, unknown>;
@@ -17,10 +19,12 @@ const write = (
   const line = JSON.stringify(payload);
   if (level === "error") {
     console.error(line);
+    persistApplicationLog(level, message, context);
     return;
   }
 
   console.log(line);
+  persistApplicationLog(level, message, context);
 };
 
 export const logger = {

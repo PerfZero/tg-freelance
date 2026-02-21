@@ -730,6 +730,49 @@
     line-height: 1.35;
 }
 
+.status-chip {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--app-border);
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+.status-chip-error {
+    border-color: color-mix(in srgb, #ea5f6d 52%, var(--app-border));
+    color: color-mix(in srgb, #ea5f6d 82%, var(--app-text));
+}
+
+.status-chip-warn {
+    border-color: color-mix(in srgb, #d7a347 52%, var(--app-border));
+    color: color-mix(in srgb, #d7a347 82%, var(--app-text));
+}
+
+.status-chip-info {
+    border-color: color-mix(
+        in srgb,
+        var(--tg-theme-link-color, #248dff) 52%,
+        var(--app-border)
+    );
+    color: var(--tg-theme-link-color, #248dff);
+}
+
+.admin-log-context {
+    margin: 8px 0 0;
+    border: 1px solid var(--app-border);
+    border-radius: 10px;
+    padding: 8px;
+    font-family:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+        "Liberation Mono", "Courier New", monospace;
+    font-size: 11px;
+    line-height: 1.35;
+    white-space: pre-wrap;
+    overflow-x: auto;
+}
+
 .notification-list {
     display: grid;
     gap: 8px;

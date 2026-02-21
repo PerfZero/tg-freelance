@@ -19,6 +19,8 @@ import {
 import type {
   AdminAuditItem,
   AdminIdentity,
+  AdminLogItem,
+  AdminLogLevelValue,
   AdminTaskItem,
   AdminUserItem,
 } from "../entities/admin/model/types";
@@ -85,7 +87,7 @@ import { TaskDetailPage } from "../pages/task-detail/ui/TaskDetailPage";
 
 import "../App.css";
 
-type AdminView = "users" | "tasks" | "audit";
+type AdminView = "users" | "tasks" | "audit" | "logs";
 type PaginationMeta = {
   page: number;
   limit: number;
@@ -110,6 +112,12 @@ function App() {
   const [token, setToken] = useState<string | null>(() => {
     if (typeof window === "undefined") {
       return null;
+    }
+
+    const queryToken = new URLSearchParams(window.location.search).get("token");
+    if (queryToken && queryToken.trim().length > 0) {
+      window.localStorage.setItem(TOKEN_KEY, queryToken);
+      return queryToken;
     }
 
     return window.localStorage.getItem(TOKEN_KEY);
@@ -236,8 +244,16 @@ function App() {
   const [adminAudit, setAdminAudit] = useState<AdminAuditItem[]>([]);
   const [adminAuditLoading, setAdminAuditLoading] = useState(false);
   const [adminAuditError, setAdminAuditError] = useState<string | null>(null);
+  const [adminLogs, setAdminLogs] = useState<AdminLogItem[]>([]);
+  const [adminLogsQuery, setAdminLogsQuery] = useState("");
+  const [adminLogsLevel, setAdminLogsLevel] = useState<
+    AdminLogLevelValue | "ALL"
+  >("ALL");
+  const [adminLogsLoading, setAdminLogsLoading] = useState(false);
+  const [adminLogsError, setAdminLogsError] = useState<string | null>(null);
 
   const isAuthenticated = Boolean(token);
+  const isTelegramMiniApp = webAppState.isTelegram;
   const preferredTab = getPreferredTabByRole(authUser?.primaryRole ?? null);
   const preferredPath = preferredTab === "create" ? "/create" : "/feed";
   const needsRoleOnboarding = Boolean(
@@ -250,6 +266,7 @@ function App() {
       : location.pathname === "/create"
         ? "create"
         : "list";
+  const hideBottomNav = location.pathname.startsWith("/admin");
 
   const isDetailOwner = Boolean(
     authUser && detailTask && detailTask.customerId === authUser.id,
@@ -341,6 +358,35 @@ function App() {
         items: AdminAuditItem[];
         pagination: PaginationMeta;
       }>("/admin/audit-log?page=1&limit=50", {}, authToken),
+    [],
+  );
+
+  const requestAdminLogs = useCallback(
+    (
+      authToken: string,
+      options: {
+        query: string;
+        level: AdminLogLevelValue | "ALL";
+      },
+    ) => {
+      const params = new URLSearchParams({
+        page: "1",
+        limit: "50",
+      });
+
+      if (options.query.trim().length > 0) {
+        params.set("q", options.query.trim());
+      }
+
+      if (options.level !== "ALL") {
+        params.set("level", options.level);
+      }
+
+      return apiRequest<{
+        items: AdminLogItem[];
+        pagination: PaginationMeta;
+      }>(`/admin/logs?${params.toString()}`, {}, authToken);
+    },
     [],
   );
 
@@ -602,6 +648,40 @@ function App() {
     }
   }, [isAdmin, requestAdminAudit, token]);
 
+  const loadAdminLogs = useCallback(
+    async (options: {
+      query: string;
+      level: AdminLogLevelValue | "ALL";
+    }): Promise<void> => {
+      if (!token || !isAdmin) {
+        setAdminLogs([]);
+        setAdminLogsError(null);
+        setAdminLogsLoading(false);
+        return;
+      }
+
+      try {
+        setAdminLogsLoading(true);
+        setAdminLogsError(null);
+
+        const response = await requestAdminLogs(token, {
+          query: options.query,
+          level: options.level,
+        });
+
+        setAdminLogs(response.items);
+      } catch (error) {
+        setAdminLogs([]);
+        setAdminLogsError(
+          error instanceof Error ? error.message : "Не удалось загрузить логи",
+        );
+      } finally {
+        setAdminLogsLoading(false);
+      }
+    },
+    [isAdmin, requestAdminLogs, token],
+  );
+
   useEffect(() => {
     if (authLoading || !isAuthenticated || !authUser) {
       return;
@@ -629,6 +709,19 @@ function App() {
       window.scrollTo(0, 0);
     }
   }, [location.pathname]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (!params.has("token")) {
+      return;
+    }
+
+    params.delete("token");
+    const nextSearch = params.toString();
+    const nextUrl = `${location.pathname}${nextSearch ? `?${nextSearch}` : ""}${location.hash}`;
+
+    navigate(nextUrl, { replace: true });
+  }, [location.hash, location.pathname, location.search, navigate]);
 
   useEffect(() => {
     let active = true;
@@ -711,6 +804,7 @@ function App() {
       setAdminUsers([]);
       setAdminTasks([]);
       setAdminAudit([]);
+      setAdminLogs([]);
       return;
     }
 
@@ -743,6 +837,7 @@ function App() {
         setAdminUsers([]);
         setAdminTasks([]);
         setAdminAudit([]);
+        setAdminLogs([]);
         setAdminAccessError(
           error instanceof Error
             ? error.message
@@ -770,7 +865,18 @@ function App() {
     void loadAdminUsers("");
     void loadAdminTasks("");
     void loadAdminAudit();
-  }, [isAdmin, loadAdminAudit, loadAdminTasks, loadAdminUsers, token]);
+    void loadAdminLogs({
+      query: "",
+      level: "ALL",
+    });
+  }, [
+    isAdmin,
+    loadAdminAudit,
+    loadAdminLogs,
+    loadAdminTasks,
+    loadAdminUsers,
+    token,
+  ]);
 
   useEffect(() => {
     if (!token) {
@@ -1675,6 +1781,10 @@ function App() {
         ),
       );
       await loadAdminAudit();
+      await loadAdminLogs({
+        query: adminLogsQuery,
+        level: adminLogsLevel,
+      });
     } catch (error) {
       setAdminUsersError(
         error instanceof Error
@@ -1732,6 +1842,10 @@ function App() {
           : prev,
       );
       await loadAdminAudit();
+      await loadAdminLogs({
+        query: adminLogsQuery,
+        level: adminLogsLevel,
+      });
     } catch (error) {
       setAdminTasksError(
         error instanceof Error
@@ -1739,6 +1853,30 @@ function App() {
           : "Не удалось отмодерировать задачу",
       );
     }
+  };
+
+  const handleOpenAdminWeb = (): void => {
+    if (!token) {
+      return;
+    }
+
+    const webAdminUrl = `${window.location.origin}/admin?token=${encodeURIComponent(token)}`;
+    const telegramWebApp = (
+      window as Window & {
+        Telegram?: {
+          WebApp?: {
+            openLink?: (url: string) => void;
+          };
+        };
+      }
+    ).Telegram?.WebApp;
+
+    if (telegramWebApp?.openLink) {
+      telegramWebApp.openLink(webAdminUrl);
+      return;
+    }
+
+    window.open(webAdminUrl, "_blank", "noopener,noreferrer");
   };
 
   const handleSendTaskMessage = async (): Promise<void> => {
@@ -2018,7 +2156,14 @@ function App() {
         onOpenBotNotifications={() => navigate("/account/bot-notifications")}
         onOpenNotificationsCenter={() => navigate("/account/notifications")}
         isAdmin={isAdmin}
-        onOpenAdmin={() => navigate("/admin")}
+        onOpenAdmin={() => {
+          if (isTelegramMiniApp) {
+            handleOpenAdminWeb();
+            return;
+          }
+
+          navigate("/admin");
+        }}
       />
     );
   };
@@ -2115,50 +2260,82 @@ function App() {
     />
   );
 
-  const renderAdmin = (): JSX.Element => (
-    <AdminPage
-      adminAccessLoading={adminAccessLoading}
-      isAdmin={isAdmin}
-      adminAccessError={adminAccessError}
-      adminIdentity={adminIdentity}
-      activeView={adminView}
-      onChangeView={setAdminView}
-      users={adminUsers}
-      usersLoading={adminUsersLoading}
-      usersError={adminUsersError}
-      usersQuery={adminUsersQuery}
-      onUsersQueryChange={setAdminUsersQuery}
-      onUsersSearch={() => {
-        void loadAdminUsers(adminUsersQuery);
-      }}
-      onUsersReload={() => {
-        void loadAdminUsers(adminUsersQuery);
-      }}
-      onToggleUserBlock={(user) => {
-        void handleAdminToggleUserBlock(user);
-      }}
-      tasks={adminTasks}
-      tasksLoading={adminTasksLoading}
-      tasksError={adminTasksError}
-      tasksQuery={adminTasksQuery}
-      onTasksQueryChange={setAdminTasksQuery}
-      onTasksSearch={() => {
-        void loadAdminTasks(adminTasksQuery);
-      }}
-      onTasksReload={() => {
-        void loadAdminTasks(adminTasksQuery);
-      }}
-      onModerateTaskCancel={(task) => {
-        void handleAdminModerateTaskCancel(task);
-      }}
-      audit={adminAudit}
-      auditLoading={adminAuditLoading}
-      auditError={adminAuditError}
-      onAuditReload={() => {
-        void loadAdminAudit();
-      }}
-    />
-  );
+  const renderAdmin = (): JSX.Element => {
+    if (isTelegramMiniApp) {
+      return (
+        <Section>
+          <Placeholder
+            header="Админка в веб-режиме"
+            description="Панель администратора вынесена из Telegram Mini App. Открой /admin во внешнем браузере."
+          />
+        </Section>
+      );
+    }
+
+    return (
+      <AdminPage
+        adminAccessLoading={adminAccessLoading}
+        isAdmin={isAdmin}
+        adminAccessError={adminAccessError}
+        adminIdentity={adminIdentity}
+        activeView={adminView}
+        onChangeView={setAdminView}
+        users={adminUsers}
+        usersLoading={adminUsersLoading}
+        usersError={adminUsersError}
+        usersQuery={adminUsersQuery}
+        onUsersQueryChange={setAdminUsersQuery}
+        onUsersSearch={() => {
+          void loadAdminUsers(adminUsersQuery);
+        }}
+        onUsersReload={() => {
+          void loadAdminUsers(adminUsersQuery);
+        }}
+        onToggleUserBlock={(user) => {
+          void handleAdminToggleUserBlock(user);
+        }}
+        tasks={adminTasks}
+        tasksLoading={adminTasksLoading}
+        tasksError={adminTasksError}
+        tasksQuery={adminTasksQuery}
+        onTasksQueryChange={setAdminTasksQuery}
+        onTasksSearch={() => {
+          void loadAdminTasks(adminTasksQuery);
+        }}
+        onTasksReload={() => {
+          void loadAdminTasks(adminTasksQuery);
+        }}
+        onModerateTaskCancel={(task) => {
+          void handleAdminModerateTaskCancel(task);
+        }}
+        audit={adminAudit}
+        auditLoading={adminAuditLoading}
+        auditError={adminAuditError}
+        onAuditReload={() => {
+          void loadAdminAudit();
+        }}
+        logs={adminLogs}
+        logsLoading={adminLogsLoading}
+        logsError={adminLogsError}
+        logsQuery={adminLogsQuery}
+        onLogsQueryChange={setAdminLogsQuery}
+        logsLevel={adminLogsLevel}
+        onLogsLevelChange={setAdminLogsLevel}
+        onLogsSearch={() => {
+          void loadAdminLogs({
+            query: adminLogsQuery,
+            level: adminLogsLevel,
+          });
+        }}
+        onLogsReload={() => {
+          void loadAdminLogs({
+            query: adminLogsQuery,
+            level: adminLogsLevel,
+          });
+        }}
+      />
+    );
+  };
 
   const renderPublicProfile = (): JSX.Element => (
     <PublicProfilePage
@@ -2410,7 +2587,7 @@ function App() {
           )}
         </div>
 
-        {!authGate && !needsRoleOnboarding ? (
+        {!authGate && !needsRoleOnboarding && !hideBottomNav ? (
           <nav className="bottom-nav">
             <button
               className={`bottom-nav-item ${activeTab === "list" ? "bottom-nav-item-active" : ""}`}

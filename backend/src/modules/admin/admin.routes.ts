@@ -1,6 +1,7 @@
 import {
   AdminAuditAction,
   AdminAuditTargetType,
+  AppLogLevel,
   TaskStatus,
   type Prisma,
 } from "@prisma/client";
@@ -64,10 +65,19 @@ const adminAuditSelect = {
   },
 } satisfies Prisma.AdminAuditLogSelect;
 
+const adminLogSelect = {
+  id: true,
+  level: true,
+  message: true,
+  context: true,
+  createdAt: true,
+} satisfies Prisma.AppLogSelect;
+
 type AdminTaskView = Prisma.TaskGetPayload<{ select: typeof adminTaskSelect }>;
 type AdminAuditView = Prisma.AdminAuditLogGetPayload<{
   select: typeof adminAuditSelect;
 }>;
+type AdminLogView = Prisma.AppLogGetPayload<{ select: typeof adminLogSelect }>;
 
 type UserBlockPayload = {
   is_blocked?: unknown;
@@ -98,7 +108,10 @@ const getQueryString = (value: unknown): string | undefined => {
 };
 
 const parseUuid = (value: unknown, fieldName: string): string => {
-  assertValidation(typeof value === "string", `${fieldName} must be a valid UUID`);
+  assertValidation(
+    typeof value === "string",
+    `${fieldName} must be a valid UUID`,
+  );
 
   const normalized = value as string;
   assertValidation(
@@ -160,7 +173,9 @@ const parseOptionalBooleanQuery = (value: unknown): boolean | undefined => {
   );
 };
 
-const parseOptionalTaskStatusQuery = (value: unknown): TaskStatus | undefined => {
+const parseOptionalTaskStatusQuery = (
+  value: unknown,
+): TaskStatus | undefined => {
   const raw = getQueryString(value);
   if (!raw) {
     return undefined;
@@ -209,8 +224,28 @@ const parseOptionalTargetTypeQuery = (
   return targetType;
 };
 
+const parseOptionalAppLogLevelQuery = (
+  value: unknown,
+): AppLogLevel | undefined => {
+  const raw = getQueryString(value);
+  if (!raw) {
+    return undefined;
+  }
+
+  const level = raw.toUpperCase() as AppLogLevel;
+  assertValidation(
+    Object.values(AppLogLevel).includes(level),
+    "level must be a valid app log level",
+  );
+
+  return level;
+};
+
 const parseUserBlockPayload = (body: UserBlockPayload) => {
-  assertValidation(typeof body.is_blocked === "boolean", "is_blocked must be a boolean");
+  assertValidation(
+    typeof body.is_blocked === "boolean",
+    "is_blocked must be a boolean",
+  );
   const isBlocked = body.is_blocked as boolean;
 
   if (body.reason === undefined) {
@@ -295,6 +330,14 @@ const mapAdminAuditEntry = (entry: AdminAuditView) => ({
     username: entry.adminUser.username,
     displayName: entry.adminUser.displayName,
   },
+});
+
+const mapAdminLogEntry = (entry: AdminLogView) => ({
+  id: entry.id,
+  level: entry.level,
+  message: entry.message,
+  context: entry.context,
+  createdAt: entry.createdAt.toISOString(),
 });
 
 const createAdminAuditLog = async (
@@ -510,146 +553,210 @@ adminRouter.get("/audit-log", requireAdmin, async (req, res, next) => {
   }
 });
 
-adminRouter.patch("/users/:userId/block", requireAdmin, async (req, res, next) => {
+adminRouter.get("/logs", requireAdmin, async (req, res, next) => {
   try {
-    const authUser = getAuthUser(res);
-    const userId = parseUuid(req.params.userId, "userId");
+    const page = parsePage(req.query.page);
+    const limit = parseLimit(req.query.limit);
+    const level = parseOptionalAppLogLevelQuery(req.query.level);
+    const query = normalizeString(getQueryString(req.query.q) ?? "");
 
-    assertBodyIsObject(req.body);
-    const payload = parseUserBlockPayload(req.body as UserBlockPayload);
+    const where: Prisma.AppLogWhereInput = {
+      ...(level ? { level } : {}),
+      ...(query.length > 0
+        ? {
+            OR: [
+              {
+                message: {
+                  contains: query,
+                  mode: "insensitive",
+                },
+              },
+            ],
+          }
+        : {}),
+    };
 
-    assertValidation(
-      authUser.id !== userId,
-      "Admin cannot block or unblock themselves",
-    );
+    const skip = (page - 1) * limit;
 
-    const updatedUser = await prisma.$transaction(async (tx) => {
-      const targetUser = await tx.user.findUnique({
-        where: { id: userId },
-        include: { profile: true },
-      });
-
-      if (!targetUser) {
-        throw new HttpError(404, "NOT_FOUND", "User not found");
-      }
-
-      const nextUser = await tx.user.update({
-        where: { id: userId },
-        data: { isBlocked: payload.isBlocked },
-        include: { profile: true },
-      });
-
-      await createAdminAuditLog(tx, {
-        adminUserId: authUser.id,
-        action: AdminAuditAction.USER_BLOCK_CHANGED,
-        targetType: AdminAuditTargetType.USER,
-        targetId: userId,
-        reason: payload.reason,
-        meta: {
-          previousIsBlocked: targetUser.isBlocked,
-          nextIsBlocked: payload.isBlocked,
-        },
-      });
-
-      return nextUser;
-    });
-
-    logger.info("admin.user_block_changed", {
-      adminUserId: authUser.id,
-      targetUserId: userId,
-      isBlocked: payload.isBlocked,
-      reason: payload.reason,
-    });
+    const [total, items] = await Promise.all([
+      prisma.appLog.count({ where }),
+      prisma.appLog.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        select: adminLogSelect,
+      }),
+    ]);
 
     res.status(200).json({
-      user: mapPublicUser(updatedUser),
+      items: items.map(mapAdminLogEntry),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+      },
     });
   } catch (error) {
     next(error);
   }
 });
 
-adminRouter.patch("/tasks/:taskId/moderate", requireAdmin, async (req, res, next) => {
-  try {
-    const authUser = getAuthUser(res);
-    const taskId = parseUuid(req.params.taskId, "taskId");
+adminRouter.patch(
+  "/users/:userId/block",
+  requireAdmin,
+  async (req, res, next) => {
+    try {
+      const authUser = getAuthUser(res);
+      const userId = parseUuid(req.params.userId, "userId");
 
-    assertBodyIsObject(req.body);
-    const payload = parseTaskModerationPayload(req.body as TaskModeratePayload);
+      assertBodyIsObject(req.body);
+      const payload = parseUserBlockPayload(req.body as UserBlockPayload);
 
-    const task = await prisma.$transaction(async (tx) => {
-      const existingTask = await tx.task.findUnique({
-        where: { id: taskId },
-        select: {
-          id: true,
-          status: true,
-          title: true,
-        },
-      });
+      assertValidation(
+        authUser.id !== userId,
+        "Admin cannot block or unblock themselves",
+      );
 
-      if (!existingTask) {
-        throw new HttpError(404, "NOT_FOUND", "Task not found");
-      }
-
-      if (payload.action === "CANCEL") {
-        assertValidation(
-          existingTask.status !== TaskStatus.CANCELED,
-          "Task is already canceled",
-        );
-        assertValidation(
-          existingTask.status !== TaskStatus.COMPLETED,
-          "Completed task cannot be moderated to canceled",
-        );
-
-        const moderatedTask = await tx.task.update({
-          where: { id: taskId },
-          data: {
-            status: TaskStatus.CANCELED,
-          },
-          select: adminTaskSelect,
+      const updatedUser = await prisma.$transaction(async (tx) => {
+        const targetUser = await tx.user.findUnique({
+          where: { id: userId },
+          include: { profile: true },
         });
 
-        await tx.taskStatusHistory.create({
-          data: {
-            taskId,
-            fromStatus: existingTask.status,
-            toStatus: TaskStatus.CANCELED,
-            changedBy: authUser.id,
-            comment: `ADMIN: ${payload.reason}`,
-          },
+        if (!targetUser) {
+          throw new HttpError(404, "NOT_FOUND", "User not found");
+        }
+
+        const nextUser = await tx.user.update({
+          where: { id: userId },
+          data: { isBlocked: payload.isBlocked },
+          include: { profile: true },
         });
 
         await createAdminAuditLog(tx, {
           adminUserId: authUser.id,
-          action: AdminAuditAction.TASK_MODERATED,
-          targetType: AdminAuditTargetType.TASK,
-          targetId: taskId,
+          action: AdminAuditAction.USER_BLOCK_CHANGED,
+          targetType: AdminAuditTargetType.USER,
+          targetId: userId,
           reason: payload.reason,
           meta: {
-            moderationAction: payload.action,
-            fromStatus: existingTask.status,
-            toStatus: TaskStatus.CANCELED,
-            taskTitle: existingTask.title,
+            previousIsBlocked: targetUser.isBlocked,
+            nextIsBlocked: payload.isBlocked,
           },
         });
 
-        return moderatedTask;
-      }
+        return nextUser;
+      });
 
-      throw new HttpError(400, "VALIDATION_ERROR", "Unsupported moderation action");
-    });
+      logger.info("admin.user_block_changed", {
+        adminUserId: authUser.id,
+        targetUserId: userId,
+        isBlocked: payload.isBlocked,
+        reason: payload.reason,
+      });
 
-    logger.info("admin.task_moderated", {
-      adminUserId: authUser.id,
-      taskId,
-      action: payload.action,
-      reason: payload.reason,
-    });
+      res.status(200).json({
+        user: mapPublicUser(updatedUser),
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
-    res.status(200).json({
-      task: mapAdminTask(task),
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+adminRouter.patch(
+  "/tasks/:taskId/moderate",
+  requireAdmin,
+  async (req, res, next) => {
+    try {
+      const authUser = getAuthUser(res);
+      const taskId = parseUuid(req.params.taskId, "taskId");
+
+      assertBodyIsObject(req.body);
+      const payload = parseTaskModerationPayload(
+        req.body as TaskModeratePayload,
+      );
+
+      const task = await prisma.$transaction(async (tx) => {
+        const existingTask = await tx.task.findUnique({
+          where: { id: taskId },
+          select: {
+            id: true,
+            status: true,
+            title: true,
+          },
+        });
+
+        if (!existingTask) {
+          throw new HttpError(404, "NOT_FOUND", "Task not found");
+        }
+
+        if (payload.action === "CANCEL") {
+          assertValidation(
+            existingTask.status !== TaskStatus.CANCELED,
+            "Task is already canceled",
+          );
+          assertValidation(
+            existingTask.status !== TaskStatus.COMPLETED,
+            "Completed task cannot be moderated to canceled",
+          );
+
+          const moderatedTask = await tx.task.update({
+            where: { id: taskId },
+            data: {
+              status: TaskStatus.CANCELED,
+            },
+            select: adminTaskSelect,
+          });
+
+          await tx.taskStatusHistory.create({
+            data: {
+              taskId,
+              fromStatus: existingTask.status,
+              toStatus: TaskStatus.CANCELED,
+              changedBy: authUser.id,
+              comment: `ADMIN: ${payload.reason}`,
+            },
+          });
+
+          await createAdminAuditLog(tx, {
+            adminUserId: authUser.id,
+            action: AdminAuditAction.TASK_MODERATED,
+            targetType: AdminAuditTargetType.TASK,
+            targetId: taskId,
+            reason: payload.reason,
+            meta: {
+              moderationAction: payload.action,
+              fromStatus: existingTask.status,
+              toStatus: TaskStatus.CANCELED,
+              taskTitle: existingTask.title,
+            },
+          });
+
+          return moderatedTask;
+        }
+
+        throw new HttpError(
+          400,
+          "VALIDATION_ERROR",
+          "Unsupported moderation action",
+        );
+      });
+
+      logger.info("admin.task_moderated", {
+        adminUserId: authUser.id,
+        taskId,
+        action: payload.action,
+        reason: payload.reason,
+      });
+
+      res.status(200).json({
+        task: mapAdminTask(task),
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);

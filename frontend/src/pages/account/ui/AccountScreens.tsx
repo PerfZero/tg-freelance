@@ -178,7 +178,7 @@ export const AccountHomeScreen = ({
           {isAdmin ? (
             <Cell
               before={<ShieldCheck size={18} />}
-              subtitle="Модерация пользователей и задач"
+              subtitle="Веб-админка: модерация и логи"
               after={accountMenuAfter("Открыть")}
               onClick={onOpenAdmin}
             >

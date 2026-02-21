@@ -3,6 +3,8 @@ import { Shield, UserX, UserCheck, Search, RefreshCw, Ban } from "lucide-react";
 import type {
   AdminAuditItem,
   AdminIdentity,
+  AdminLogItem,
+  AdminLogLevelValue,
   AdminTaskItem,
   AdminUserItem,
 } from "../../../entities/admin/model/types";
@@ -10,7 +12,7 @@ import { formatDate, formatMoney, trimText } from "../../../shared/lib/format";
 import { getStatusLabel } from "../../../shared/lib/task";
 import { Button, Input, Placeholder, Section } from "../../../shared/ui";
 
-type AdminView = "users" | "tasks" | "audit";
+type AdminView = "users" | "tasks" | "audit" | "logs";
 
 type AdminPageProps = {
   adminAccessLoading: boolean;
@@ -39,6 +41,15 @@ type AdminPageProps = {
   auditLoading: boolean;
   auditError: string | null;
   onAuditReload: () => void;
+  logs: AdminLogItem[];
+  logsLoading: boolean;
+  logsError: string | null;
+  logsQuery: string;
+  onLogsQueryChange: (value: string) => void;
+  logsLevel: AdminLogLevelValue | "ALL";
+  onLogsLevelChange: (value: AdminLogLevelValue | "ALL") => void;
+  onLogsSearch: () => void;
+  onLogsReload: () => void;
 };
 
 export const AdminPage = ({
@@ -68,11 +79,49 @@ export const AdminPage = ({
   auditLoading,
   auditError,
   onAuditReload,
+  logs,
+  logsLoading,
+  logsError,
+  logsQuery,
+  onLogsQueryChange,
+  logsLevel,
+  onLogsLevelChange,
+  onLogsSearch,
+  onLogsReload,
 }: AdminPageProps): JSX.Element => {
+  const logLevelLabel = (level: AdminLogLevelValue): string => {
+    if (level === "ERROR") {
+      return "Ошибка";
+    }
+
+    if (level === "WARN") {
+      return "Предупреждение";
+    }
+
+    return "Инфо";
+  };
+
+  const logLevelMode = (
+    level: AdminLogLevelValue,
+  ): "plain" | "bezeled" | "outline" => {
+    if (level === "ERROR") {
+      return "plain";
+    }
+
+    if (level === "WARN") {
+      return "bezeled";
+    }
+
+    return "outline";
+  };
+
   if (adminAccessLoading) {
     return (
       <Section>
-        <Placeholder header="Проверка доступа" description="Проверяем права администратора..." />
+        <Placeholder
+          header="Проверка доступа"
+          description="Проверяем права администратора..."
+        />
       </Section>
     );
   }
@@ -82,7 +131,9 @@ export const AdminPage = ({
       <Section>
         <Placeholder
           header="Нет доступа"
-          description={adminAccessError ?? "Админ-доступ не выдан для этого аккаунта."}
+          description={
+            adminAccessError ?? "Админ-доступ не выдан для этого аккаунта."
+          }
         />
       </Section>
     );
@@ -120,11 +171,21 @@ export const AdminPage = ({
           >
             Аудит
           </Button>
+          <Button
+            mode={activeView === "logs" ? "filled" : "outline"}
+            size="s"
+            onClick={() => onChangeView("logs")}
+          >
+            Логи
+          </Button>
         </div>
       </Section>
 
       {activeView === "users" ? (
-        <Section header="Пользователи" footer="Поиск по имени, username или telegram id.">
+        <Section
+          header="Пользователи"
+          footer="Поиск по имени, username или telegram id."
+        >
           <div className="form-grid">
             <Input
               header="Поиск"
@@ -150,18 +211,25 @@ export const AdminPage = ({
           </div>
 
           {usersLoading ? (
-            <Placeholder header="Загрузка" description="Получаем пользователей..." />
+            <Placeholder
+              header="Загрузка"
+              description="Получаем пользователей..."
+            />
           ) : usersError ? (
             <Placeholder header="Ошибка" description={usersError} />
           ) : users.length === 0 ? (
-            <Placeholder header="Пусто" description="Пользователи не найдены." />
+            <Placeholder
+              header="Пусто"
+              description="Пользователи не найдены."
+            />
           ) : (
             <div className="proposal-list">
               {users.map((user) => (
                 <div key={user.id} className="proposal-card">
                   <p className="proposal-title">{user.displayName}</p>
                   <p className="proposal-meta">
-                    telegram: {user.telegramId} • статус: {user.isBlocked ? "заблокирован" : "активен"}
+                    telegram: {user.telegramId} • статус:{" "}
+                    {user.isBlocked ? "заблокирован" : "активен"}
                   </p>
                   <p className="proposal-mini-meta">ID: {user.id}</p>
                   <div className="row-actions row-actions-tight">
@@ -171,8 +239,14 @@ export const AdminPage = ({
                       onClick={() => onToggleUserBlock(user)}
                     >
                       <span className="btn-with-icon">
-                        {user.isBlocked ? <UserCheck size={16} /> : <UserX size={16} />}
-                        <span>{user.isBlocked ? "Разблокировать" : "Заблокировать"}</span>
+                        {user.isBlocked ? (
+                          <UserCheck size={16} />
+                        ) : (
+                          <UserX size={16} />
+                        )}
+                        <span>
+                          {user.isBlocked ? "Разблокировать" : "Заблокировать"}
+                        </span>
                       </span>
                     </Button>
                   </div>
@@ -184,7 +258,10 @@ export const AdminPage = ({
       ) : null}
 
       {activeView === "tasks" ? (
-        <Section header="Задачи" footer="Модерация: принудительная отмена задачи с причиной.">
+        <Section
+          header="Задачи"
+          footer="Модерация: принудительная отмена задачи с причиной."
+        >
           <div className="form-grid">
             <Input
               header="Поиск"
@@ -225,14 +302,24 @@ export const AdminPage = ({
                   <article key={task.id} className="task-feed-card">
                     <div className="task-feed-card-head">
                       <h3 className="task-feed-card-title">{task.title}</h3>
-                      <p className="task-feed-card-budget">{formatMoney(task.budget)}</p>
+                      <p className="task-feed-card-budget">
+                        {formatMoney(task.budget)}
+                      </p>
                     </div>
                     <div className="task-feed-meta-row">
-                      <span className="task-feed-meta-chip">{getStatusLabel(task.status)}</span>
-                      <span className="task-feed-meta-chip">{formatDate(task.createdAt)}</span>
+                      <span className="task-feed-meta-chip">
+                        {getStatusLabel(task.status)}
+                      </span>
+                      <span className="task-feed-meta-chip">
+                        {formatDate(task.createdAt)}
+                      </span>
                     </div>
-                    <p className="proposal-mini-meta">Заказчик: {task.customer?.displayName ?? "—"}</p>
-                    <p className="task-feed-description">{trimText(task.description, 140)}</p>
+                    <p className="proposal-mini-meta">
+                      Заказчик: {task.customer?.displayName ?? "—"}
+                    </p>
+                    <p className="task-feed-description">
+                      {trimText(task.description, 140)}
+                    </p>
                     <div className="row-actions row-actions-tight">
                       <Button
                         mode={canModerate ? "plain" : "outline"}
@@ -255,7 +342,10 @@ export const AdminPage = ({
       ) : null}
 
       {activeView === "audit" ? (
-        <Section header="Аудит действий" footer="Журнал действий администраторов.">
+        <Section
+          header="Аудит действий"
+          footer="Журнал действий администраторов."
+        >
           <div className="row-actions row-actions-tight">
             <Button mode="outline" size="m" onClick={onAuditReload}>
               <span className="btn-with-icon">
@@ -266,11 +356,17 @@ export const AdminPage = ({
           </div>
 
           {auditLoading ? (
-            <Placeholder header="Загрузка" description="Получаем журнал аудита..." />
+            <Placeholder
+              header="Загрузка"
+              description="Получаем журнал аудита..."
+            />
           ) : auditError ? (
             <Placeholder header="Ошибка" description={auditError} />
           ) : audit.length === 0 ? (
-            <Placeholder header="Пусто" description="Записей аудита пока нет." />
+            <Placeholder
+              header="Пусто"
+              description="Записей аудита пока нет."
+            />
           ) : (
             <div className="status-history-list">
               {audit.map((entry) => (
@@ -282,13 +378,120 @@ export const AdminPage = ({
                     </span>
                   </p>
                   <p className="status-history-meta">
-                    {formatDate(entry.createdAt)} • {entry.adminUser.displayName}
+                    {formatDate(entry.createdAt)} •{" "}
+                    {entry.adminUser.displayName}
                   </p>
                   <p className="proposal-mini-meta">
                     {entry.targetType} • {entry.targetId}
                   </p>
                   {entry.reason ? (
-                    <p className="status-history-comment">Причина: {entry.reason}</p>
+                    <p className="status-history-comment">
+                      Причина: {entry.reason}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+      ) : null}
+
+      {activeView === "logs" ? (
+        <Section
+          header="Логи приложения"
+          footer="Логи API и backend-событий для диагностики. Показываются сначала новые."
+        >
+          <div className="form-grid">
+            <Input
+              header="Поиск по сообщению"
+              placeholder="Например: request.error или admin.task_moderated"
+              value={logsQuery}
+              onChange={(event) => onLogsQueryChange(event.target.value)}
+            />
+          </div>
+
+          <div className="chip-row">
+            <Button
+              mode={logsLevel === "ALL" ? "filled" : "outline"}
+              size="s"
+              onClick={() => onLogsLevelChange("ALL")}
+            >
+              Все
+            </Button>
+            <Button
+              mode={logsLevel === "ERROR" ? "filled" : "outline"}
+              size="s"
+              onClick={() => onLogsLevelChange("ERROR")}
+            >
+              ERROR
+            </Button>
+            <Button
+              mode={logsLevel === "WARN" ? "filled" : "outline"}
+              size="s"
+              onClick={() => onLogsLevelChange("WARN")}
+            >
+              WARN
+            </Button>
+            <Button
+              mode={logsLevel === "INFO" ? "filled" : "outline"}
+              size="s"
+              onClick={() => onLogsLevelChange("INFO")}
+            >
+              INFO
+            </Button>
+          </div>
+
+          <div className="row-actions row-actions-tight">
+            <Button mode="filled" size="m" onClick={onLogsSearch}>
+              <span className="btn-with-icon">
+                <Search size={16} />
+                <span>Найти</span>
+              </span>
+            </Button>
+            <Button mode="outline" size="m" onClick={onLogsReload}>
+              <span className="btn-with-icon">
+                <RefreshCw size={16} />
+                <span>Обновить</span>
+              </span>
+            </Button>
+          </div>
+
+          {logsLoading ? (
+            <Placeholder header="Загрузка" description="Получаем логи..." />
+          ) : logsError ? (
+            <Placeholder header="Ошибка" description={logsError} />
+          ) : logs.length === 0 ? (
+            <Placeholder
+              header="Пусто"
+              description="Логов по текущим фильтрам нет."
+            />
+          ) : (
+            <div className="status-history-list">
+              {logs.map((entry) => (
+                <div key={entry.id} className="status-history-card">
+                  <p className="status-history-line">
+                    <span className="btn-with-icon">
+                      <Shield size={14} />
+                      <span>{entry.message}</span>
+                    </span>
+                  </p>
+                  <p className="status-history-meta">
+                    {formatDate(entry.createdAt)} •{" "}
+                    <span
+                      className={`status-chip status-chip-${entry.level.toLowerCase()}`}
+                    >
+                      {logLevelLabel(entry.level)}
+                    </span>
+                  </p>
+                  <div className="row-actions row-actions-tight">
+                    <Button mode={logLevelMode(entry.level)} size="s">
+                      {entry.level}
+                    </Button>
+                  </div>
+                  {entry.context ? (
+                    <pre className="admin-log-context">
+                      {JSON.stringify(entry.context, null, 2)}
+                    </pre>
                   ) : null}
                 </div>
               ))}

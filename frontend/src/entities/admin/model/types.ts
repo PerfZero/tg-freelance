@@ -51,3 +51,13 @@ export type AdminAuditItem = {
     displayName: string;
   };
 };
+
+export type AdminLogLevelValue = "INFO" | "WARN" | "ERROR";
+
+export type AdminLogItem = {
+  id: string;
+  level: AdminLogLevelValue;
+  message: string;
+  context: Record<string, unknown> | null;
+  createdAt: string;
+};
