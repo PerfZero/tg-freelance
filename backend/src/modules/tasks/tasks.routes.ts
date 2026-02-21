@@ -16,6 +16,7 @@ const MAX_TAGS = 30;
 const MAX_TAG_LENGTH = 40;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
+const MAX_PROPOSAL_COMMENT_LENGTH = 3000;
 
 type TaskCreatePayload = {
   title?: unknown;
@@ -33,6 +34,12 @@ type TaskPatchPayload = {
   deadline_at?: unknown;
   category?: unknown;
   tags?: unknown;
+};
+
+type ProposalCreatePayload = {
+  price?: unknown;
+  comment?: unknown;
+  eta_days?: unknown;
 };
 
 const taskSelect = {
@@ -56,7 +63,28 @@ const taskSelect = {
   },
 } satisfies Prisma.TaskSelect;
 
+const proposalSelect = {
+  id: true,
+  taskId: true,
+  executorId: true,
+  price: true,
+  comment: true,
+  etaDays: true,
+  createdAt: true,
+  updatedAt: true,
+  executor: {
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+    },
+  },
+} satisfies Prisma.ProposalSelect;
+
 type TaskView = Prisma.TaskGetPayload<{ select: typeof taskSelect }>;
+type ProposalView = Prisma.ProposalGetPayload<{
+  select: typeof proposalSelect;
+}>;
 
 const normalizeString = (value: string): string => value.trim();
 
@@ -90,6 +118,20 @@ const parsePositiveNumber = (value: unknown, fieldName: string): string => {
   assertValidation(parsed > 0, `${fieldName} must be greater than 0`);
 
   return String(parsed);
+};
+
+const parsePositiveInteger = (value: unknown, fieldName: string): number => {
+  assertValidation(
+    typeof value === "string" || typeof value === "number",
+    `${fieldName} must be an integer`,
+  );
+
+  const parsed = Number(value);
+
+  assertValidation(Number.isInteger(parsed), `${fieldName} must be an integer`);
+  assertValidation(parsed > 0, `${fieldName} must be greater than 0`);
+
+  return parsed;
 };
 
 const parseRequiredString = (
@@ -177,7 +219,10 @@ const parseOptionalTags = (
   assertValidation(Array.isArray(value), "tags must be an array of strings");
 
   const tags = (value as unknown[]).map((item, index) => {
-    assertValidation(typeof item === "string", `tags[${index}] must be a string`);
+    assertValidation(
+      typeof item === "string",
+      `tags[${index}] must be a string`,
+    );
 
     const normalized = normalizeString(item as string);
 
@@ -190,7 +235,10 @@ const parseOptionalTags = (
     return normalized;
   });
 
-  assertValidation(tags.length <= MAX_TAGS, `tags must contain at most ${MAX_TAGS} items`);
+  assertValidation(
+    tags.length <= MAX_TAGS,
+    `tags must contain at most ${MAX_TAGS} items`,
+  );
 
   return {
     provided: true,
@@ -206,7 +254,11 @@ const parseRequiredTaskCreate = (body: TaskCreatePayload) => {
     MAX_DESCRIPTION_LENGTH,
   );
   const budget = parsePositiveNumber(body.budget, "budget");
-  const category = parseRequiredString(body.category, "category", MAX_CATEGORY_LENGTH);
+  const category = parseRequiredString(
+    body.category,
+    "category",
+    MAX_CATEGORY_LENGTH,
+  );
   const deadline = parseOptionalDeadline(body.deadline_at);
   const tags = parseOptionalTags(body.tags);
 
@@ -216,7 +268,23 @@ const parseRequiredTaskCreate = (body: TaskCreatePayload) => {
     budget,
     category,
     deadline: deadline.provided ? deadline.normalized : undefined,
-    tags: tags.provided ? tags.normalized ?? [] : [],
+    tags: tags.provided ? (tags.normalized ?? []) : [],
+  };
+};
+
+const parseRequiredProposalCreate = (body: ProposalCreatePayload) => {
+  const price = parsePositiveNumber(body.price, "price");
+  const comment = parseRequiredString(
+    body.comment,
+    "comment",
+    MAX_PROPOSAL_COMMENT_LENGTH,
+  );
+  const etaDays = parsePositiveInteger(body.eta_days, "eta_days");
+
+  return {
+    price,
+    comment,
+    etaDays,
   };
 };
 
@@ -241,6 +309,24 @@ const mapTask = (task: TaskView) => ({
     : null,
 });
 
+const mapProposal = (proposal: ProposalView) => ({
+  id: proposal.id,
+  taskId: proposal.taskId,
+  executorId: proposal.executorId,
+  price: Number(proposal.price.toString()),
+  comment: proposal.comment,
+  etaDays: proposal.etaDays,
+  createdAt: proposal.createdAt.toISOString(),
+  updatedAt: proposal.updatedAt.toISOString(),
+  executor: proposal.executor
+    ? {
+        id: proposal.executor.id,
+        username: proposal.executor.username,
+        displayName: proposal.executor.displayName,
+      }
+    : null,
+});
+
 const getTaskOrThrow = async (taskId: string): Promise<TaskView> => {
   const task = await prisma.task.findUnique({
     where: { id: taskId },
@@ -254,13 +340,26 @@ const getTaskOrThrow = async (taskId: string): Promise<TaskView> => {
   return task;
 };
 
+const parseTaskIdOrThrow = (id: unknown): string => {
+  assertValidation(typeof id === "string", "id must be a valid UUID");
+
+  const taskId = id as string;
+
+  assertValidation(isUuid(taskId), "id must be a valid UUID");
+
+  return taskId;
+};
+
 const parsePage = (value: unknown): number => {
   if (value === undefined) {
     return 1;
   }
 
   const parsed = Number.parseInt(getQueryString(value) ?? "", 10);
-  assertValidation(Number.isInteger(parsed) && parsed > 0, "page must be a positive integer");
+  assertValidation(
+    Number.isInteger(parsed) && parsed > 0,
+    "page must be a positive integer",
+  );
 
   return parsed;
 };
@@ -359,9 +458,11 @@ tasksRouter.get("/", requireAuth, async (req, res, next) => {
     const searchRaw = getQueryString(req.query.q);
 
     const budgetMinRaw =
-      getQueryString(req.query.budget_min) ?? getQueryString(req.query.budget_from);
+      getQueryString(req.query.budget_min) ??
+      getQueryString(req.query.budget_from);
     const budgetMaxRaw =
-      getQueryString(req.query.budget_max) ?? getQueryString(req.query.budget_to);
+      getQueryString(req.query.budget_max) ??
+      getQueryString(req.query.budget_to);
 
     const budgetMin = budgetMinRaw
       ? Number(parsePositiveNumber(budgetMinRaw, "budget_min"))
@@ -371,7 +472,10 @@ tasksRouter.get("/", requireAuth, async (req, res, next) => {
       : undefined;
 
     if (budgetMin !== undefined && budgetMax !== undefined) {
-      assertValidation(budgetMin <= budgetMax, "budget_min must be <= budget_max");
+      assertValidation(
+        budgetMin <= budgetMax,
+        "budget_min must be <= budget_max",
+      );
     }
 
     const where: Prisma.TaskWhereInput = {
@@ -434,14 +538,103 @@ tasksRouter.get("/", requireAuth, async (req, res, next) => {
   }
 });
 
+tasksRouter.post("/:id/proposals", requireAuth, async (req, res, next) => {
+  try {
+    const taskId = parseTaskIdOrThrow(req.params.id);
+    assertBodyIsObject(req.body);
+
+    const authUser = getAuthUser(res);
+    const payload = parseRequiredProposalCreate(
+      req.body as ProposalCreatePayload,
+    );
+
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: {
+        id: true,
+        customerId: true,
+        status: true,
+        assignment: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    if (!task) {
+      throw new HttpError(404, "NOT_FOUND", "Task not found");
+    }
+
+    assertValidation(
+      task.status === TaskStatus.OPEN,
+      "Task is not open for proposals",
+    );
+    assertValidation(
+      task.customerId !== authUser.id,
+      "You cannot create a proposal for your own task",
+    );
+    assertValidation(
+      !task.assignment,
+      "Executor has already been selected for this task",
+    );
+
+    const existingProposal = await prisma.proposal.findUnique({
+      where: {
+        taskId_executorId: {
+          taskId,
+          executorId: authUser.id,
+        },
+      },
+      select: { id: true },
+    });
+
+    assertValidation(
+      !existingProposal,
+      "Only one proposal per executor is allowed for a task",
+    );
+
+    let proposal: ProposalView;
+
+    try {
+      proposal = await prisma.proposal.create({
+        data: {
+          taskId,
+          executorId: authUser.id,
+          price: payload.price,
+          comment: payload.comment,
+          etaDays: payload.etaDays,
+        },
+        select: proposalSelect,
+      });
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (error as { code?: unknown }).code === "P2002"
+      ) {
+        throw new HttpError(
+          400,
+          "VALIDATION_ERROR",
+          "Only one proposal per executor is allowed for a task",
+        );
+      }
+
+      throw error;
+    }
+
+    res.status(201).json({
+      proposal: mapProposal(proposal),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 tasksRouter.get("/:id", requireAuth, async (req, res, next) => {
   try {
-    const taskIdRaw = req.params.id;
-
-    assertValidation(typeof taskIdRaw === "string", "id must be a valid UUID");
-    const taskId = taskIdRaw as string;
-
-    assertValidation(isUuid(taskId), "id must be a valid UUID");
+    const taskId = parseTaskIdOrThrow(req.params.id);
 
     const task = await getTaskOrThrow(taskId);
 
@@ -455,19 +648,18 @@ tasksRouter.get("/:id", requireAuth, async (req, res, next) => {
 
 tasksRouter.patch("/:id", requireAuth, async (req, res, next) => {
   try {
-    const taskIdRaw = req.params.id;
-
-    assertValidation(typeof taskIdRaw === "string", "id must be a valid UUID");
-    const taskId = taskIdRaw as string;
-
-    assertValidation(isUuid(taskId), "id must be a valid UUID");
+    const taskId = parseTaskIdOrThrow(req.params.id);
     assertBodyIsObject(req.body);
 
     const authUser = getAuthUser(res);
     const existingTask = await getTaskOrThrow(taskId);
 
     if (existingTask.customerId !== authUser.id) {
-      throw new HttpError(403, "FORBIDDEN", "Only task owner can edit this task");
+      throw new HttpError(
+        403,
+        "FORBIDDEN",
+        "Only task owner can edit this task",
+      );
     }
 
     assertValidation(
@@ -527,18 +719,17 @@ tasksRouter.patch("/:id", requireAuth, async (req, res, next) => {
 
 tasksRouter.post("/:id/cancel", requireAuth, async (req, res, next) => {
   try {
-    const taskIdRaw = req.params.id;
-
-    assertValidation(typeof taskIdRaw === "string", "id must be a valid UUID");
-    const taskId = taskIdRaw as string;
-
-    assertValidation(isUuid(taskId), "id must be a valid UUID");
+    const taskId = parseTaskIdOrThrow(req.params.id);
 
     const authUser = getAuthUser(res);
     const existingTask = await getTaskOrThrow(taskId);
 
     if (existingTask.customerId !== authUser.id) {
-      throw new HttpError(403, "FORBIDDEN", "Only task owner can cancel this task");
+      throw new HttpError(
+        403,
+        "FORBIDDEN",
+        "Only task owner can cancel this task",
+      );
     }
 
     assertValidation(

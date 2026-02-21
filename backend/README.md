@@ -80,6 +80,17 @@ npm run prisma:studio
 - `POST /tasks/:id/cancel`
   - header: `Authorization: Bearer <token>`
   - only owner and only if task status is `OPEN`
+- `POST /tasks/:id/proposals`
+  - header: `Authorization: Bearer <token>`
+  - body:
+    - `price: number`
+    - `comment: string`
+    - `eta_days: number`
+  - ограничения:
+    - нельзя откликаться на свою задачу
+    - на задачу можно оставить только один отклик от исполнителя
+    - отклики доступны только для задач в статусе `OPEN`
+    - после выбора исполнителя новые отклики запрещены
 
 ## Ошибки и логирование
 
