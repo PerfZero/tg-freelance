@@ -207,4 +207,5 @@
 - [x] `E4-T5` На фронте добавлены кнопки смены статуса в карточке задачи (`send-to-review`, `approve`, `reject-review`).
 - [x] `E4-T6` На фронте добавлено отображение истории переходов статуса задачи.
 - [x] `E5-T1` Добавлен in-memory rate limit на создание задач и откликов (`POST /tasks`, `POST /tasks/:id/proposals`).
+- [x] `E5-T2` Усилено audit-логирование (`audit.auth_login`, `audit.task_status_changed`, `audit.http_error_4xx`, `audit.http_error_5xx`).
 - [x] `E5-T3` Добавлен admin-эндпоинт блокировки пользователя `PATCH /admin/users/:userId/block` (с проверкой admin-доступа).

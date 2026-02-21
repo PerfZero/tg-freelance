@@ -206,6 +206,10 @@ npm run prisma:studio
   - `request.start`
   - `request.finish`
   - `request.error`
+  - `audit.auth_login`
+  - `audit.task_status_changed`
+  - `audit.http_error_4xx`
+  - `audit.http_error_5xx`
 
 ## Структура
 

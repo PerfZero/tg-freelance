@@ -36,7 +36,7 @@ export const errorHandler = (
     requestId,
   };
 
-  logger.error("request.error", {
+  const errorLogContext = {
     requestId,
     method: req.method,
     path: req.originalUrl,
@@ -44,6 +44,22 @@ export const errorHandler = (
     code: knownError.code,
     errorMessage: knownError.message,
     details,
+  };
+
+  if (knownError.status >= 500) {
+    logger.error("audit.http_error_5xx", {
+      ...errorLogContext,
+      stack:
+        error instanceof Error && env.nodeEnv !== "production"
+          ? error.stack
+          : undefined,
+    });
+  } else if (knownError.status >= 400) {
+    logger.warn("audit.http_error_4xx", errorLogContext);
+  }
+
+  logger.error("request.error", {
+    ...errorLogContext,
     stack:
       error instanceof Error && env.nodeEnv !== "production"
         ? error.stack

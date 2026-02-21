@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { HttpError } from "../../common/http-error";
+import { logger } from "../../common/logger";
 import { assertBodyIsObject, assertValidation } from "../../common/validation";
 import { prisma } from "../../config/prisma";
 import { getAuthUser, requireAuth } from "./auth.middleware";
@@ -81,6 +82,12 @@ authRouter.post("/telegram", async (req, res, next) => {
     const verifiedInitData = verifyTelegramInitData(initData);
 
     const telegramUser = verifiedInitData.user;
+    const existingUser = await prisma.user.findUnique({
+      where: {
+        telegramId: BigInt(telegramUser.id),
+      },
+      select: { id: true },
+    });
 
     const user = await prisma.user.upsert({
       where: {
@@ -114,6 +121,13 @@ authRouter.post("/telegram", async (req, res, next) => {
     const token = signAuthToken({
       sub: hydratedUser.id,
       telegramId: hydratedUser.telegramId.toString(),
+    });
+
+    logger.info("audit.auth_login", {
+      userId: hydratedUser.id,
+      telegramId: hydratedUser.telegramId.toString(),
+      username: hydratedUser.username,
+      isFirstLogin: !existingUser,
     });
 
     res.status(200).json({

@@ -2,6 +2,7 @@ import { TaskStatus, type Prisma } from "@prisma/client";
 import { Router } from "express";
 
 import { HttpError } from "../../common/http-error";
+import { logger } from "../../common/logger";
 import { createInMemoryRateLimit } from "../../common/rate-limit";
 import { assertBodyIsObject, assertValidation } from "../../common/validation";
 import { env } from "../../config/env";
@@ -510,7 +511,7 @@ const createTaskStatusHistory = async (
     return;
   }
 
-  await tx.taskStatusHistory.create({
+  const createdEntry = await tx.taskStatusHistory.create({
     data: {
       taskId: transition.taskId,
       fromStatus: transition.fromStatus,
@@ -518,6 +519,20 @@ const createTaskStatusHistory = async (
       changedBy: transition.changedBy,
       comment: transition.comment ?? null,
     },
+    select: {
+      id: true,
+      createdAt: true,
+    },
+  });
+
+  logger.info("audit.task_status_changed", {
+    historyId: createdEntry.id,
+    taskId: transition.taskId,
+    fromStatus: transition.fromStatus,
+    toStatus: transition.toStatus,
+    changedBy: transition.changedBy,
+    comment: transition.comment ?? null,
+    createdAt: createdEntry.createdAt.toISOString(),
   });
 };
 
