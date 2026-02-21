@@ -513,6 +513,12 @@ function App() {
   }, [location.pathname, navigate]);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.scrollTo(0, 0);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
     let active = true;
 
     const hydrateAuth = async (): Promise<void> => {
