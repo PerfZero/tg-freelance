@@ -437,6 +437,43 @@ export const TaskDetailPage = ({
   const taskChatListRef = useRef<HTMLDivElement | null>(null);
   const prevTaskMessagesCountRef = useRef(0);
 
+  const hasAssignment = Boolean(detailTask?.assignment);
+  const canUseTaskChat = Boolean(
+    authUser &&
+    detailTask?.assignment &&
+    detailTask &&
+    (authUser.id === detailTask.customerId ||
+      authUser.id === detailTask.assignment.executorId),
+  );
+
+  useEffect(() => {
+    if (!canUseTaskChat) {
+      prevTaskMessagesCountRef.current = 0;
+      return;
+    }
+
+    const listElement = taskChatListRef.current;
+    if (!listElement) {
+      return;
+    }
+
+    const prevCount = prevTaskMessagesCountRef.current;
+    const nextCount = taskMessages.length;
+    const distanceToBottom =
+      listElement.scrollHeight -
+      listElement.scrollTop -
+      listElement.clientHeight;
+    const wasNearBottom = distanceToBottom < 80;
+
+    if (prevCount === 0 || nextCount > prevCount || wasNearBottom) {
+      window.requestAnimationFrame(() => {
+        listElement.scrollTop = listElement.scrollHeight;
+      });
+    }
+
+    prevTaskMessagesCountRef.current = nextCount;
+  }, [canUseTaskChat, taskMessages]);
+
   if (detailLoading) {
     return (
       <Section>
@@ -477,41 +514,6 @@ export const TaskDetailPage = ({
   const canClampDetailDescription = shouldClampTaskDescription(
     detailTask.description,
   );
-  const hasAssignment = Boolean(detailTask.assignment);
-  const canUseTaskChat = Boolean(
-    authUser &&
-    detailTask.assignment &&
-    (authUser.id === detailTask.customerId ||
-      authUser.id === detailTask.assignment.executorId),
-  );
-
-  useEffect(() => {
-    if (!canUseTaskChat) {
-      prevTaskMessagesCountRef.current = 0;
-      return;
-    }
-
-    const listElement = taskChatListRef.current;
-    if (!listElement) {
-      return;
-    }
-
-    const prevCount = prevTaskMessagesCountRef.current;
-    const nextCount = taskMessages.length;
-    const distanceToBottom =
-      listElement.scrollHeight -
-      listElement.scrollTop -
-      listElement.clientHeight;
-    const wasNearBottom = distanceToBottom < 80;
-
-    if (prevCount === 0 || nextCount > prevCount || wasNearBottom) {
-      window.requestAnimationFrame(() => {
-        listElement.scrollTop = listElement.scrollHeight;
-      });
-    }
-
-    prevTaskMessagesCountRef.current = nextCount;
-  }, [canUseTaskChat, taskMessages]);
 
   return (
     <>
