@@ -26,6 +26,15 @@ npm run prisma:migrate -- --name <migration_name>
 npm run prisma:studio
 ```
 
+## Auth API
+
+- `POST /auth/telegram`:
+  - body: `{ "initData": "<Telegram WebApp initData string>" }`
+  - результат: `token`, `tokenType`, `user`
+- `GET /auth/me`:
+  - header: `Authorization: Bearer <token>`
+  - результат: текущий пользователь
+
 ## Ошибки и логирование
 
 - Все API-ошибки возвращаются в формате:

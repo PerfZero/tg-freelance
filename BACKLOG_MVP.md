@@ -178,3 +178,6 @@
 - [x] `E0-T2` Поднят PostgreSQL (docker compose), подключен Prisma, создана и применена миграция `init`.
 - [x] `E0-T3` Инициализирован frontend (`React + Vite + TypeScript`), подключен Telegram WebApp SDK, добавлен базовый Mini App shell.
 - [x] `E0-T4` Введены `request-id`, централизованный формат ошибок и структурное логирование запросов/ошибок.
+- [x] `E1-T1` Реализован `POST /auth/telegram` с проверкой подписи `initData`.
+- [x] `E1-T2` Реализован `GET /auth/me` по Bearer-токену.
+- [x] `E1-T3` На логине выполняется upsert `users` и `profiles`.
