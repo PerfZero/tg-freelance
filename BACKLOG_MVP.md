@@ -184,3 +184,8 @@
 - [x] `E1-T3` На логине выполняется upsert `users` и `profiles`.
 - [x] `E1-T4` Реализованы `GET /profile/me` и `PATCH /profile/me`.
 - [x] `E1-T5` Реализован `GET /profile/:userId`.
+- [x] `E2-T1` Реализован `POST /tasks`.
+- [x] `E2-T2` Реализован `GET /tasks` (пагинация, фильтры, сортировка).
+- [x] `E2-T3` Реализован `GET /tasks/:id`.
+- [x] `E2-T4` Реализован `PATCH /tasks/:id` (только владелец и только `OPEN`).
+- [x] `E2-T5` Реализован `POST /tasks/:id/cancel`.

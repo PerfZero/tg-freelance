@@ -10,6 +10,7 @@ import { authRouter } from "./modules/auth/auth.routes";
 import { healthRouter } from "./modules/health/health.routes";
 import { profileRouter } from "./modules/profile/profile.routes";
 import { rootRouter } from "./modules/root/root.routes";
+import { tasksRouter } from "./modules/tasks/tasks.routes";
 
 export const createApp = () => {
   const app = express();
@@ -24,6 +25,7 @@ export const createApp = () => {
   app.use("/health", healthRouter);
   app.use("/auth", authRouter);
   app.use("/profile", profileRouter);
+  app.use("/tasks", tasksRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

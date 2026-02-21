@@ -1,0 +1,563 @@
+import { TaskStatus, type Prisma } from "@prisma/client";
+import { Router } from "express";
+
+import { HttpError } from "../../common/http-error";
+import { assertBodyIsObject, assertValidation } from "../../common/validation";
+import { prisma } from "../../config/prisma";
+import { getAuthUser, requireAuth } from "../auth/auth.middleware";
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const MAX_TITLE_LENGTH = 200;
+const MAX_DESCRIPTION_LENGTH = 5000;
+const MAX_CATEGORY_LENGTH = 80;
+const MAX_TAGS = 30;
+const MAX_TAG_LENGTH = 40;
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
+
+type TaskCreatePayload = {
+  title?: unknown;
+  description?: unknown;
+  budget?: unknown;
+  deadline_at?: unknown;
+  category?: unknown;
+  tags?: unknown;
+};
+
+type TaskPatchPayload = {
+  title?: unknown;
+  description?: unknown;
+  budget?: unknown;
+  deadline_at?: unknown;
+  category?: unknown;
+  tags?: unknown;
+};
+
+const taskSelect = {
+  id: true,
+  customerId: true,
+  title: true,
+  description: true,
+  budget: true,
+  deadlineAt: true,
+  category: true,
+  tags: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
+  customer: {
+    select: {
+      id: true,
+      username: true,
+      displayName: true,
+    },
+  },
+} satisfies Prisma.TaskSelect;
+
+type TaskView = Prisma.TaskGetPayload<{ select: typeof taskSelect }>;
+
+const normalizeString = (value: string): string => value.trim();
+
+const isUuid = (value: string): boolean => UUID_PATTERN.test(value);
+
+const getQueryString = (value: unknown): string | undefined => {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    typeof value[0] === "string"
+  ) {
+    return value[0];
+  }
+
+  return undefined;
+};
+
+const parsePositiveNumber = (value: unknown, fieldName: string): string => {
+  assertValidation(
+    typeof value === "string" || typeof value === "number",
+    `${fieldName} must be a number`,
+  );
+
+  const parsed = Number(value);
+
+  assertValidation(Number.isFinite(parsed), `${fieldName} must be a number`);
+  assertValidation(parsed > 0, `${fieldName} must be greater than 0`);
+
+  return String(parsed);
+};
+
+const parseRequiredString = (
+  value: unknown,
+  fieldName: string,
+  maxLength: number,
+): string => {
+  assertValidation(typeof value === "string", `${fieldName} must be a string`);
+
+  const normalized = normalizeString(value as string);
+
+  assertValidation(normalized.length > 0, `${fieldName} is required`);
+  assertValidation(
+    normalized.length <= maxLength,
+    `${fieldName} must be at most ${maxLength} characters`,
+  );
+
+  return normalized;
+};
+
+const parseOptionalString = (
+  value: unknown,
+  fieldName: string,
+  maxLength: number,
+): { provided: boolean; normalized?: string } => {
+  if (value === undefined) {
+    return { provided: false };
+  }
+
+  return {
+    provided: true,
+    normalized: parseRequiredString(value, fieldName, maxLength),
+  };
+};
+
+const parseOptionalBudget = (
+  value: unknown,
+): { provided: boolean; normalized?: string } => {
+  if (value === undefined) {
+    return { provided: false };
+  }
+
+  return {
+    provided: true,
+    normalized: parsePositiveNumber(value, "budget"),
+  };
+};
+
+const parseOptionalDeadline = (
+  value: unknown,
+): { provided: boolean; normalized?: Date | null } => {
+  if (value === undefined) {
+    return { provided: false };
+  }
+
+  if (value === null) {
+    return { provided: true, normalized: null };
+  }
+
+  assertValidation(
+    typeof value === "string",
+    "deadline_at must be an ISO date string or null",
+  );
+
+  const parsedDate = new Date(value as string);
+
+  assertValidation(
+    !Number.isNaN(parsedDate.getTime()),
+    "deadline_at must be a valid ISO date string",
+  );
+
+  return {
+    provided: true,
+    normalized: parsedDate,
+  };
+};
+
+const parseOptionalTags = (
+  value: unknown,
+): { provided: boolean; normalized?: string[] } => {
+  if (value === undefined) {
+    return { provided: false };
+  }
+
+  assertValidation(Array.isArray(value), "tags must be an array of strings");
+
+  const tags = (value as unknown[]).map((item, index) => {
+    assertValidation(typeof item === "string", `tags[${index}] must be a string`);
+
+    const normalized = normalizeString(item as string);
+
+    assertValidation(normalized.length > 0, `tags[${index}] cannot be empty`);
+    assertValidation(
+      normalized.length <= MAX_TAG_LENGTH,
+      `tags[${index}] must be at most ${MAX_TAG_LENGTH} characters`,
+    );
+
+    return normalized;
+  });
+
+  assertValidation(tags.length <= MAX_TAGS, `tags must contain at most ${MAX_TAGS} items`);
+
+  return {
+    provided: true,
+    normalized: tags,
+  };
+};
+
+const parseRequiredTaskCreate = (body: TaskCreatePayload) => {
+  const title = parseRequiredString(body.title, "title", MAX_TITLE_LENGTH);
+  const description = parseRequiredString(
+    body.description,
+    "description",
+    MAX_DESCRIPTION_LENGTH,
+  );
+  const budget = parsePositiveNumber(body.budget, "budget");
+  const category = parseRequiredString(body.category, "category", MAX_CATEGORY_LENGTH);
+  const deadline = parseOptionalDeadline(body.deadline_at);
+  const tags = parseOptionalTags(body.tags);
+
+  return {
+    title,
+    description,
+    budget,
+    category,
+    deadline: deadline.provided ? deadline.normalized : undefined,
+    tags: tags.provided ? tags.normalized ?? [] : [],
+  };
+};
+
+const mapTask = (task: TaskView) => ({
+  id: task.id,
+  customerId: task.customerId,
+  title: task.title,
+  description: task.description,
+  budget: Number(task.budget.toString()),
+  deadlineAt: task.deadlineAt ? task.deadlineAt.toISOString() : null,
+  category: task.category,
+  tags: task.tags,
+  status: task.status,
+  createdAt: task.createdAt.toISOString(),
+  updatedAt: task.updatedAt.toISOString(),
+  customer: task.customer
+    ? {
+        id: task.customer.id,
+        username: task.customer.username,
+        displayName: task.customer.displayName,
+      }
+    : null,
+});
+
+const getTaskOrThrow = async (taskId: string): Promise<TaskView> => {
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: taskSelect,
+  });
+
+  if (!task) {
+    throw new HttpError(404, "NOT_FOUND", "Task not found");
+  }
+
+  return task;
+};
+
+const parsePage = (value: unknown): number => {
+  if (value === undefined) {
+    return 1;
+  }
+
+  const parsed = Number.parseInt(getQueryString(value) ?? "", 10);
+  assertValidation(Number.isInteger(parsed) && parsed > 0, "page must be a positive integer");
+
+  return parsed;
+};
+
+const parseLimit = (value: unknown): number => {
+  if (value === undefined) {
+    return DEFAULT_LIMIT;
+  }
+
+  const parsed = Number.parseInt(getQueryString(value) ?? "", 10);
+  assertValidation(
+    Number.isInteger(parsed) && parsed > 0,
+    "limit must be a positive integer",
+  );
+  assertValidation(parsed <= MAX_LIMIT, `limit must be at most ${MAX_LIMIT}`);
+
+  return parsed;
+};
+
+const parseSort = (value: unknown): Prisma.TaskOrderByWithRelationInput => {
+  const sortRaw = getQueryString(value);
+  if (!sortRaw || sortRaw === "new") {
+    return { createdAt: "desc" };
+  }
+
+  if (sortRaw === "budget" || sortRaw === "budget_desc") {
+    return { budget: "desc" };
+  }
+
+  if (sortRaw === "budget_asc") {
+    return { budget: "asc" };
+  }
+
+  throw new HttpError(
+    400,
+    "VALIDATION_ERROR",
+    "sort must be one of: new, budget, budget_asc, budget_desc",
+  );
+};
+
+const parseStatusFilter = (value: unknown): TaskStatus => {
+  const raw = getQueryString(value);
+
+  if (!raw) {
+    return TaskStatus.OPEN;
+  }
+
+  const status = raw as TaskStatus;
+  assertValidation(
+    Object.values(TaskStatus).includes(status),
+    "status must be a valid task status",
+  );
+
+  return status;
+};
+
+export const tasksRouter = Router();
+
+tasksRouter.post("/", requireAuth, async (req, res, next) => {
+  try {
+    assertBodyIsObject(req.body);
+
+    const authUser = getAuthUser(res);
+    const payload = parseRequiredTaskCreate(req.body as TaskCreatePayload);
+
+    const task = await prisma.task.create({
+      data: {
+        customerId: authUser.id,
+        title: payload.title,
+        description: payload.description,
+        budget: payload.budget,
+        deadlineAt: payload.deadline,
+        category: payload.category,
+        tags: payload.tags,
+        status: TaskStatus.OPEN,
+      },
+      select: taskSelect,
+    });
+
+    res.status(201).json({
+      task: mapTask(task),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+tasksRouter.get("/", requireAuth, async (req, res, next) => {
+  try {
+    const page = parsePage(req.query.page);
+    const limit = parseLimit(req.query.limit);
+    const orderBy = parseSort(req.query.sort);
+    const status = parseStatusFilter(req.query.status);
+
+    const categoryRaw = getQueryString(req.query.category);
+    const searchRaw = getQueryString(req.query.q);
+
+    const budgetMinRaw =
+      getQueryString(req.query.budget_min) ?? getQueryString(req.query.budget_from);
+    const budgetMaxRaw =
+      getQueryString(req.query.budget_max) ?? getQueryString(req.query.budget_to);
+
+    const budgetMin = budgetMinRaw
+      ? Number(parsePositiveNumber(budgetMinRaw, "budget_min"))
+      : undefined;
+    const budgetMax = budgetMaxRaw
+      ? Number(parsePositiveNumber(budgetMaxRaw, "budget_max"))
+      : undefined;
+
+    if (budgetMin !== undefined && budgetMax !== undefined) {
+      assertValidation(budgetMin <= budgetMax, "budget_min must be <= budget_max");
+    }
+
+    const where: Prisma.TaskWhereInput = {
+      status,
+      ...(categoryRaw && normalizeString(categoryRaw).length > 0
+        ? { category: normalizeString(categoryRaw) }
+        : {}),
+      ...(budgetMin !== undefined || budgetMax !== undefined
+        ? {
+            budget: {
+              ...(budgetMin !== undefined ? { gte: String(budgetMin) } : {}),
+              ...(budgetMax !== undefined ? { lte: String(budgetMax) } : {}),
+            },
+          }
+        : {}),
+      ...(searchRaw && normalizeString(searchRaw).length > 0
+        ? {
+            OR: [
+              {
+                title: {
+                  contains: normalizeString(searchRaw),
+                  mode: "insensitive",
+                },
+              },
+              {
+                description: {
+                  contains: normalizeString(searchRaw),
+                  mode: "insensitive",
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    const skip = (page - 1) * limit;
+
+    const [total, tasks] = await Promise.all([
+      prisma.task.count({ where }),
+      prisma.task.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+        select: taskSelect,
+      }),
+    ]);
+
+    res.status(200).json({
+      items: tasks.map(mapTask),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+tasksRouter.get("/:id", requireAuth, async (req, res, next) => {
+  try {
+    const taskIdRaw = req.params.id;
+
+    assertValidation(typeof taskIdRaw === "string", "id must be a valid UUID");
+    const taskId = taskIdRaw as string;
+
+    assertValidation(isUuid(taskId), "id must be a valid UUID");
+
+    const task = await getTaskOrThrow(taskId);
+
+    res.status(200).json({
+      task: mapTask(task),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+tasksRouter.patch("/:id", requireAuth, async (req, res, next) => {
+  try {
+    const taskIdRaw = req.params.id;
+
+    assertValidation(typeof taskIdRaw === "string", "id must be a valid UUID");
+    const taskId = taskIdRaw as string;
+
+    assertValidation(isUuid(taskId), "id must be a valid UUID");
+    assertBodyIsObject(req.body);
+
+    const authUser = getAuthUser(res);
+    const existingTask = await getTaskOrThrow(taskId);
+
+    if (existingTask.customerId !== authUser.id) {
+      throw new HttpError(403, "FORBIDDEN", "Only task owner can edit this task");
+    }
+
+    assertValidation(
+      existingTask.status === TaskStatus.OPEN,
+      "Only OPEN tasks can be edited",
+    );
+
+    const payload = req.body as TaskPatchPayload;
+
+    const title = parseOptionalString(payload.title, "title", MAX_TITLE_LENGTH);
+    const description = parseOptionalString(
+      payload.description,
+      "description",
+      MAX_DESCRIPTION_LENGTH,
+    );
+    const budget = parseOptionalBudget(payload.budget);
+    const category = parseOptionalString(
+      payload.category,
+      "category",
+      MAX_CATEGORY_LENGTH,
+    );
+    const deadline = parseOptionalDeadline(payload.deadline_at);
+    const tags = parseOptionalTags(payload.tags);
+
+    const hasUpdates =
+      title.provided ||
+      description.provided ||
+      budget.provided ||
+      category.provided ||
+      deadline.provided ||
+      tags.provided;
+
+    assertValidation(hasUpdates, "No valid fields to update");
+
+    const updatedTask = await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        ...(title.provided ? { title: title.normalized } : {}),
+        ...(description.provided
+          ? { description: description.normalized }
+          : {}),
+        ...(budget.provided ? { budget: budget.normalized } : {}),
+        ...(category.provided ? { category: category.normalized } : {}),
+        ...(deadline.provided ? { deadlineAt: deadline.normalized } : {}),
+        ...(tags.provided ? { tags: tags.normalized } : {}),
+      },
+      select: taskSelect,
+    });
+
+    res.status(200).json({
+      task: mapTask(updatedTask),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+tasksRouter.post("/:id/cancel", requireAuth, async (req, res, next) => {
+  try {
+    const taskIdRaw = req.params.id;
+
+    assertValidation(typeof taskIdRaw === "string", "id must be a valid UUID");
+    const taskId = taskIdRaw as string;
+
+    assertValidation(isUuid(taskId), "id must be a valid UUID");
+
+    const authUser = getAuthUser(res);
+    const existingTask = await getTaskOrThrow(taskId);
+
+    if (existingTask.customerId !== authUser.id) {
+      throw new HttpError(403, "FORBIDDEN", "Only task owner can cancel this task");
+    }
+
+    assertValidation(
+      existingTask.status === TaskStatus.OPEN,
+      "Only OPEN tasks can be canceled",
+    );
+
+    const task = await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        status: TaskStatus.CANCELED,
+      },
+      select: taskSelect,
+    });
+
+    res.status(200).json({
+      task: mapTask(task),
+    });
+  } catch (error) {
+    next(error);
+  }
+});

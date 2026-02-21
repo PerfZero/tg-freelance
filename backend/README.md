@@ -51,6 +51,36 @@ npm run prisma:studio
   - header: `Authorization: Bearer <token>`
   - результат: публичный профиль пользователя
 
+## Tasks API
+
+- `POST /tasks`
+  - header: `Authorization: Bearer <token>`
+  - body:
+    - `title: string`
+    - `description: string`
+    - `budget: number`
+    - `category: string`
+    - `deadline_at?: string | null` (ISO datetime)
+    - `tags?: string[]`
+- `GET /tasks`
+  - header: `Authorization: Bearer <token>`
+  - query (optional):
+    - `page`, `limit`
+    - `status` (`OPEN` by default)
+    - `category`
+    - `q` (search in title/description)
+    - `budget_min`, `budget_max`
+    - `sort` (`new`, `budget`, `budget_asc`, `budget_desc`)
+- `GET /tasks/:id`
+  - header: `Authorization: Bearer <token>`
+- `PATCH /tasks/:id`
+  - header: `Authorization: Bearer <token>`
+  - only owner and only if task status is `OPEN`
+  - body: any subset of `title`, `description`, `budget`, `deadline_at`, `category`, `tags`
+- `POST /tasks/:id/cancel`
+  - header: `Authorization: Bearer <token>`
+  - only owner and only if task status is `OPEN`
+
 ## Ошибки и логирование
 
 - Все API-ошибки возвращаются в формате:
