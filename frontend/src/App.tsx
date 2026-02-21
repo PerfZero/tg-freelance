@@ -100,6 +100,25 @@ type TaskStatusHistoryItem = {
   };
 };
 
+type NotificationTypeValue =
+  | "PROPOSAL_CREATED"
+  | "EXECUTOR_SELECTED"
+  | "TASK_SENT_TO_REVIEW"
+  | "TASK_APPROVED"
+  | "TASK_REJECTED";
+
+type NotificationItem = {
+  id: string;
+  userId: string;
+  type: NotificationTypeValue;
+  title: string;
+  body: string;
+  payload: Record<string, unknown> | null;
+  isRead: boolean;
+  createdAt: string;
+  readAt: string | null;
+};
+
 type ProposalItem = {
   id: string;
   taskId: string;
@@ -526,6 +545,13 @@ function App() {
   const [proposalEditMode, setProposalEditMode] = useState(false);
 
   const [selectPendingId, setSelectPendingId] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsError, setNotificationsError] = useState<string | null>(
+    null,
+  );
+  const [notificationsUnreadCount, setNotificationsUnreadCount] = useState(0);
+  const [notificationsPending, setNotificationsPending] = useState(false);
 
   const isAuthenticated = Boolean(token);
   const activeTab: TabState = location.pathname.startsWith("/account")
@@ -555,6 +581,18 @@ function App() {
       authToken,
     );
 
+  const requestNotifications = (authToken: string) =>
+    apiRequest<{
+      items: NotificationItem[];
+      unreadCount: number;
+      pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+      };
+    }>("/notifications?page=1&limit=20", {}, authToken);
+
   const refreshStatusHistory = async (): Promise<void> => {
     if (!token || !detailTaskId) {
       return;
@@ -575,6 +613,39 @@ function App() {
       );
     } finally {
       setStatusHistoryLoading(false);
+    }
+  };
+
+  const refreshNotifications = async (options?: {
+    silent?: boolean;
+  }): Promise<void> => {
+    if (!token) {
+      return;
+    }
+
+    const isSilent = options?.silent === true;
+
+    try {
+      if (!isSilent) {
+        setNotificationsLoading(true);
+      }
+      setNotificationsError(null);
+
+      const response = await requestNotifications(token);
+      setNotifications(response.items);
+      setNotificationsUnreadCount(response.unreadCount);
+    } catch (error) {
+      setNotifications([]);
+      setNotificationsUnreadCount(0);
+      setNotificationsError(
+        error instanceof Error
+          ? error.message
+          : "Не удалось загрузить уведомления",
+      );
+    } finally {
+      if (!isSilent) {
+        setNotificationsLoading(false);
+      }
     }
   };
 
@@ -661,6 +732,61 @@ function App() {
       active = false;
     };
   }, [webAppState.isTelegram, webAppState.initData]);
+
+  useEffect(() => {
+    if (!token) {
+      setNotifications([]);
+      setNotificationsUnreadCount(0);
+      setNotificationsError(null);
+      setNotificationsLoading(false);
+      return;
+    }
+
+    let active = true;
+
+    const loadNotifications = async (): Promise<void> => {
+      try {
+        setNotificationsLoading(true);
+        setNotificationsError(null);
+
+        const response = await requestNotifications(token);
+
+        if (!active) {
+          return;
+        }
+
+        setNotifications(response.items);
+        setNotificationsUnreadCount(response.unreadCount);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setNotifications([]);
+        setNotificationsUnreadCount(0);
+        setNotificationsError(
+          error instanceof Error
+            ? error.message
+            : "Не удалось загрузить уведомления",
+        );
+      } finally {
+        if (active) {
+          setNotificationsLoading(false);
+        }
+      }
+    };
+
+    void loadNotifications();
+
+    const timerId = window.setInterval(() => {
+      void refreshNotifications({ silent: true });
+    }, 15000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timerId);
+    };
+  }, [token]);
 
   useEffect(() => {
     if (!token) {
@@ -1262,44 +1388,179 @@ function App() {
     }
   };
 
+  const handleReadNotification = async (
+    notificationId: string,
+  ): Promise<void> => {
+    if (!token) {
+      return;
+    }
+
+    try {
+      setNotificationsPending(true);
+      setNotificationsError(null);
+
+      await apiRequest<{ notification: NotificationItem }>(
+        `/notifications/${notificationId}/read`,
+        {
+          method: "POST",
+        },
+        token,
+      );
+
+      await refreshNotifications({ silent: true });
+    } catch (error) {
+      setNotificationsError(
+        error instanceof Error
+          ? error.message
+          : "Не удалось отметить уведомление прочитанным",
+      );
+    } finally {
+      setNotificationsPending(false);
+    }
+  };
+
+  const handleReadAllNotifications = async (): Promise<void> => {
+    if (!token) {
+      return;
+    }
+
+    try {
+      setNotificationsPending(true);
+      setNotificationsError(null);
+
+      await apiRequest<{ updatedCount: number }>(
+        "/notifications/read-all",
+        {
+          method: "POST",
+        },
+        token,
+      );
+
+      await refreshNotifications({ silent: true });
+    } catch (error) {
+      setNotificationsError(
+        error instanceof Error
+          ? error.message
+          : "Не удалось отметить уведомления прочитанными",
+      );
+    } finally {
+      setNotificationsPending(false);
+    }
+  };
+
   const renderProfile = (): JSX.Element => {
     if (!authUser) {
       return <></>;
     }
 
     return (
-      <Section
-        header="Профиль"
-        footer={`API: ${API_BASE_URL} | WebApp: ${webAppState.version}`}
-      >
-        <List>
-          <Cell
-            before={<Avatar size={48} acronym={profileAcronym} />}
-            subtitle={
-              authUser.username ? `@${authUser.username}` : "без username"
-            }
-            description={
-              webAppState.isTelegram
-                ? "Сессия Telegram активна"
-                : "Режим браузера"
-            }
-          >
-            {authUser.displayName}
-          </Cell>
-          <Cell
-            subtitle="Статус профиля"
-            after={authUser.profile ? "Заполнен" : "Пустой"}
-          >
-            Профиль в системе
-          </Cell>
-          <Cell
-            subtitle="Завершено задач"
-            after={String(authUser.profile?.completedTasksCount ?? 0)}
-          >
-            Рейтинг
-          </Cell>
-        </List>
-      </Section>
+      <>
+        <Section
+          header="Профиль"
+          footer={`API: ${API_BASE_URL} | WebApp: ${webAppState.version}`}
+        >
+          <List>
+            <Cell
+              before={<Avatar size={48} acronym={profileAcronym} />}
+              subtitle={
+                authUser.username ? `@${authUser.username}` : "без username"
+              }
+              description={
+                webAppState.isTelegram
+                  ? "Сессия Telegram активна"
+                  : "Режим браузера"
+              }
+            >
+              {authUser.displayName}
+            </Cell>
+            <Cell
+              subtitle="Статус профиля"
+              after={authUser.profile ? "Заполнен" : "Пустой"}
+            >
+              Профиль в системе
+            </Cell>
+            <Cell
+              subtitle="Завершено задач"
+              after={String(authUser.profile?.completedTasksCount ?? 0)}
+            >
+              Рейтинг
+            </Cell>
+          </List>
+        </Section>
+
+        <Section
+          header={`Уведомления (${notificationsUnreadCount})`}
+          footer="Отметь уведомления прочитанными, чтобы держать ленту чистой."
+        >
+          <div className="row-actions row-actions-tight">
+            <Button
+              mode="outline"
+              size="s"
+              disabled={notificationsPending || notificationsUnreadCount === 0}
+              onClick={() => {
+                void handleReadAllNotifications();
+              }}
+            >
+              Прочитать все
+            </Button>
+            <Button
+              mode="bezeled"
+              size="s"
+              disabled={notificationsPending}
+              onClick={() => {
+                void refreshNotifications();
+              }}
+            >
+              Обновить
+            </Button>
+          </div>
+
+          {notificationsLoading ? (
+            <Placeholder
+              header="Загрузка"
+              description="Получаем уведомления..."
+            />
+          ) : notificationsError ? (
+            <Placeholder header="Ошибка" description={notificationsError} />
+          ) : notifications.length === 0 ? (
+            <Placeholder
+              header="Пока пусто"
+              description="Когда появятся события по задачам, они будут здесь."
+            />
+          ) : (
+            <div className="notification-list">
+              {notifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  className={`notification-card ${notification.isRead ? "notification-read" : "notification-unread"}`}
+                >
+                  <p className="notification-title">{notification.title}</p>
+                  <p className="notification-body">{notification.body}</p>
+                  <p className="notification-meta">
+                    {formatDate(notification.createdAt)} •{" "}
+                    {notification.isRead ? "Прочитано" : "Не прочитано"}
+                  </p>
+
+                  {!notification.isRead ? (
+                    <div className="notification-actions">
+                      <Button
+                        mode="outline"
+                        size="s"
+                        disabled={notificationsPending}
+                        onClick={() => {
+                          void handleReadNotification(notification.id);
+                        }}
+                      >
+                        Отметить прочитанным
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+      </>
     );
   };
 
@@ -2139,7 +2400,9 @@ function App() {
               size="m"
               onClick={() => switchTab("profile")}
             >
-              Профиль
+              {notificationsUnreadCount > 0
+                ? `Профиль (${notificationsUnreadCount})`
+                : "Профиль"}
             </Button>
           </div>
 

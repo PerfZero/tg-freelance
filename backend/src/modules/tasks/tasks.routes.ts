@@ -1,4 +1,4 @@
-import { TaskStatus, type Prisma } from "@prisma/client";
+import { NotificationType, TaskStatus, type Prisma } from "@prisma/client";
 import { Router } from "express";
 
 import { HttpError } from "../../common/http-error";
@@ -8,6 +8,7 @@ import { assertBodyIsObject, assertValidation } from "../../common/validation";
 import { env } from "../../config/env";
 import { prisma } from "../../config/prisma";
 import { getAuthUser, requireAuth } from "../auth/auth.middleware";
+import { createNotification } from "../notifications/notifications.service";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -729,6 +730,7 @@ tasksRouter.post(
         select: {
           id: true,
           customerId: true,
+          title: true,
           status: true,
           assignment: {
             select: {
@@ -798,6 +800,30 @@ tasksRouter.post(
         }
 
         throw error;
+      }
+
+      try {
+        await createNotification(prisma, {
+          userId: task.customerId,
+          type: NotificationType.PROPOSAL_CREATED,
+          title: "Новый отклик",
+          body: `По задаче "${task.title}" пришел новый отклик.`,
+          payload: {
+            taskId,
+            proposalId: proposal.id,
+          },
+        });
+      } catch (notificationError) {
+        logger.warn("notifications.create_failed", {
+          event: "PROPOSAL_CREATED",
+          taskId,
+          proposalId: proposal.id,
+          targetUserId: task.customerId,
+          error:
+            notificationError instanceof Error
+              ? notificationError.message
+              : "Unknown notification error",
+        });
       }
 
       res.status(201).json({
@@ -888,6 +914,7 @@ tasksRouter.post(
               id: true,
               customerId: true,
               status: true,
+              title: true,
               assignment: {
                 select: { id: true },
               },
@@ -949,6 +976,17 @@ tasksRouter.post(
             },
           });
 
+          await createNotification(tx, {
+            userId: proposal.executorId,
+            type: NotificationType.EXECUTOR_SELECTED,
+            title: "Вас выбрали исполнителем",
+            body: `Заказчик выбрал вас исполнителем по задаче "${task.title}".`,
+            payload: {
+              taskId,
+              proposalId: proposal.id,
+            },
+          });
+
           return updateTaskStatusWithHistory(tx, {
             taskId,
             fromStatus: task.status,
@@ -993,6 +1031,8 @@ tasksRouter.post("/:id/send-to-review", requireAuth, async (req, res, next) => {
         select: {
           id: true,
           status: true,
+          title: true,
+          customerId: true,
           assignment: {
             select: {
               executorId: true,
@@ -1022,6 +1062,16 @@ tasksRouter.post("/:id/send-to-review", requireAuth, async (req, res, next) => {
         );
       }
 
+      await createNotification(tx, {
+        userId: existingTask.customerId,
+        type: NotificationType.TASK_SENT_TO_REVIEW,
+        title: "Задача отправлена на проверку",
+        body: `Исполнитель отправил задачу "${existingTask.title}" на проверку.`,
+        payload: {
+          taskId,
+        },
+      });
+
       return updateTaskStatusWithHistory(tx, {
         taskId,
         fromStatus: existingTask.status,
@@ -1049,10 +1099,12 @@ tasksRouter.post("/:id/approve", requireAuth, async (req, res, next) => {
         select: {
           id: true,
           customerId: true,
+          title: true,
           status: true,
           assignment: {
             select: {
               id: true,
+              executorId: true,
             },
           },
         },
@@ -1074,10 +1126,18 @@ tasksRouter.post("/:id/approve", requireAuth, async (req, res, next) => {
         existingTask.status === TaskStatus.ON_REVIEW,
         "Only ON_REVIEW tasks can be approved",
       );
-      assertValidation(
-        !!existingTask.assignment,
-        "Task has no assigned executor",
-      );
+      const assignment = existingTask.assignment;
+      assertValidation(!!assignment, "Task has no assigned executor");
+
+      await createNotification(tx, {
+        userId: assignment!.executorId,
+        type: NotificationType.TASK_APPROVED,
+        title: "Задача подтверждена",
+        body: `Заказчик подтвердил выполнение задачи "${existingTask.title}".`,
+        payload: {
+          taskId,
+        },
+      });
 
       return updateTaskStatusWithHistory(tx, {
         taskId,
@@ -1111,10 +1171,12 @@ tasksRouter.post("/:id/reject-review", requireAuth, async (req, res, next) => {
         select: {
           id: true,
           customerId: true,
+          title: true,
           status: true,
           assignment: {
             select: {
               id: true,
+              executorId: true,
             },
           },
         },
@@ -1136,10 +1198,19 @@ tasksRouter.post("/:id/reject-review", requireAuth, async (req, res, next) => {
         existingTask.status === TaskStatus.ON_REVIEW,
         "Only ON_REVIEW tasks can be rejected",
       );
-      assertValidation(
-        !!existingTask.assignment,
-        "Task has no assigned executor",
-      );
+      const assignment = existingTask.assignment;
+      assertValidation(!!assignment, "Task has no assigned executor");
+
+      await createNotification(tx, {
+        userId: assignment!.executorId,
+        type: NotificationType.TASK_REJECTED,
+        title: "Задача возвращена в работу",
+        body: `Заказчик вернул задачу "${existingTask.title}" в работу.`,
+        payload: {
+          taskId,
+          comment: payload.comment,
+        },
+      });
 
       return updateTaskStatusWithHistory(tx, {
         taskId,

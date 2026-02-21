@@ -8,7 +8,7 @@
     min-height: 100vh;
     max-width: 840px;
     margin: 0 auto;
-    padding-top: max(76px, calc(env(safe-area-inset-top) + 20px));
+    padding-top: max(10px, calc(env(safe-area-inset-top) + 20px));
     padding-right: max(10px, env(safe-area-inset-right));
     padding-bottom: max(24px, env(safe-area-inset-bottom));
     padding-left: max(10px, env(safe-area-inset-left));
@@ -408,6 +408,57 @@
     margin: 8px 0 0;
     font-size: 14px;
     line-height: 1.35;
+}
+
+.notification-list {
+    display: grid;
+    gap: 8px;
+}
+
+.notification-card {
+    border: 1px solid
+        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.12));
+    border-radius: 12px;
+    padding: 10px 11px;
+    background: var(--tg-theme-bg-color, #ffffff);
+}
+
+.notification-unread {
+    border-color: color-mix(
+        in srgb,
+        var(--tg-theme-link-color, #248dff) 45%,
+        var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.12))
+    );
+}
+
+.notification-read {
+    opacity: 0.9;
+}
+
+.notification-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.notification-body {
+    margin: 6px 0 0;
+    font-size: 14px;
+    line-height: 1.35;
+}
+
+.notification-meta {
+    margin: 7px 0 0;
+    color: var(--tg-theme-hint-color, #788898);
+    font-size: 12px;
+}
+
+.notification-actions {
+    margin-top: 8px;
+}
+
+.notification-actions .ui-btn {
+    width: 100%;
 }
 
 .error-text {

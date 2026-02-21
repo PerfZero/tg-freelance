@@ -15,6 +15,14 @@ enum TaskStatus {
   CANCELED
 }
 
+enum NotificationType {
+  PROPOSAL_CREATED
+  EXECUTOR_SELECTED
+  TASK_SENT_TO_REVIEW
+  TASK_APPROVED
+  TASK_REJECTED
+}
+
 model User {
   id                  String              @id @default(uuid()) @db.Uuid
   telegramId          BigInt              @unique @map("telegram_id")
@@ -30,6 +38,7 @@ model User {
   customerAssignments Assignment[]        @relation("CustomerAssignments")
   executorAssignments Assignment[]        @relation("ExecutorAssignments")
   changedTaskStatuses TaskStatusHistory[] @relation("ChangedTaskStatuses")
+  notifications       Notification[]      @relation("UserNotifications")
 
   @@map("users")
 }
@@ -117,4 +126,21 @@ model TaskStatusHistory {
   @@index([taskId])
   @@index([changedBy])
   @@map("task_status_history")
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  title     String
+  body      String
+  payload   Json?
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+  readAt    DateTime?        @map("read_at")
+  user      User             @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, isRead])
+  @@map("notifications")
 }

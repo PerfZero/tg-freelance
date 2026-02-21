@@ -174,6 +174,28 @@ npm run prisma:studio
   - результат:
     - обновленный пользователь
 
+## Notifications API
+
+- `GET /notifications`
+  - header: `Authorization: Bearer <token>`
+  - query (optional):
+    - `page`, `limit`
+  - результат:
+    - `items[]`, `unreadCount`, `pagination`
+- `POST /notifications/:id/read`
+  - header: `Authorization: Bearer <token>`
+  - помечает уведомление прочитанным
+- `POST /notifications/read-all`
+  - header: `Authorization: Bearer <token>`
+  - помечает все непрочитанные уведомления пользователя прочитанными
+
+- События MVP, при которых создаются уведомления:
+  - новый отклик по задаче заказчика
+  - выбор исполнителя заказчиком
+  - отправка задачи на проверку исполнителем
+  - подтверждение задачи заказчиком
+  - отклонение проверки заказчиком
+
 ## Status History
 
 - При переходах статуса задачи автоматически создается запись в `task_status_history`.
