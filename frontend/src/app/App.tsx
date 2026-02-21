@@ -16,6 +16,12 @@ import {
   useNavigate,
 } from "react-router-dom";
 
+import type {
+  AdminAuditItem,
+  AdminIdentity,
+  AdminTaskItem,
+  AdminUserItem,
+} from "../entities/admin/model/types";
 import type { TaskMessageItem } from "../entities/chat/model/types";
 import type { NotificationItem } from "../entities/notification/model/types";
 import type {
@@ -72,11 +78,21 @@ import {
 } from "../pages/account/ui/AccountScreens";
 import { CreateTaskPage } from "../pages/create-task/ui/CreateTaskPage";
 import { FeedPage } from "../pages/feed/ui/FeedPage";
+import { AdminPage } from "../pages/admin/ui/AdminPage";
 import { RoleOnboardingPage } from "../pages/onboarding/ui/RoleOnboardingPage";
 import { PublicProfilePage } from "../pages/public-profile/ui/PublicProfilePage";
 import { TaskDetailPage } from "../pages/task-detail/ui/TaskDetailPage";
 
 import "../App.css";
+
+type AdminView = "users" | "tasks" | "audit";
+type PaginationMeta = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
 function App() {
   const webAppState = useMemo(() => getSafeState(), []);
   const profileAcronym = useMemo(
@@ -199,6 +215,27 @@ function App() {
   );
   const [notificationsUnreadCount, setNotificationsUnreadCount] = useState(0);
   const [notificationsPending, setNotificationsPending] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminAccessLoading, setAdminAccessLoading] = useState(false);
+  const [adminAccessError, setAdminAccessError] = useState<string | null>(null);
+  const [adminIdentity, setAdminIdentity] = useState<AdminIdentity | null>(
+    null,
+  );
+  const [adminView, setAdminView] = useState<AdminView>("users");
+
+  const [adminUsers, setAdminUsers] = useState<AdminUserItem[]>([]);
+  const [adminUsersQuery, setAdminUsersQuery] = useState("");
+  const [adminUsersLoading, setAdminUsersLoading] = useState(false);
+  const [adminUsersError, setAdminUsersError] = useState<string | null>(null);
+
+  const [adminTasks, setAdminTasks] = useState<AdminTaskItem[]>([]);
+  const [adminTasksQuery, setAdminTasksQuery] = useState("");
+  const [adminTasksLoading, setAdminTasksLoading] = useState(false);
+  const [adminTasksError, setAdminTasksError] = useState<string | null>(null);
+
+  const [adminAudit, setAdminAudit] = useState<AdminAuditItem[]>([]);
+  const [adminAuditLoading, setAdminAuditLoading] = useState(false);
+  const [adminAuditError, setAdminAuditError] = useState<string | null>(null);
 
   const isAuthenticated = Boolean(token);
   const preferredTab = getPreferredTabByRole(authUser?.primaryRole ?? null);
@@ -206,11 +243,13 @@ function App() {
   const needsRoleOnboarding = Boolean(
     isAuthenticated && authUser && authUser.primaryRole === null,
   );
-  const activeTab: TabState = location.pathname.startsWith("/account")
-    ? "profile"
-    : location.pathname === "/create"
-      ? "create"
-      : "list";
+  const activeTab: TabState =
+    location.pathname.startsWith("/account") ||
+    location.pathname.startsWith("/admin")
+      ? "profile"
+      : location.pathname === "/create"
+        ? "create"
+        : "list";
 
   const isDetailOwner = Boolean(
     authUser && detailTask && detailTask.customerId === authUser.id,
@@ -261,6 +300,47 @@ function App() {
         {},
         authToken,
       ),
+    [],
+  );
+
+  const requestAdminUsers = useCallback((authToken: string, query: string) => {
+    const params = new URLSearchParams({
+      page: "1",
+      limit: "50",
+    });
+
+    if (query.trim().length > 0) {
+      params.set("q", query.trim());
+    }
+
+    return apiRequest<{
+      items: AdminUserItem[];
+      pagination: PaginationMeta;
+    }>(`/admin/users?${params.toString()}`, {}, authToken);
+  }, []);
+
+  const requestAdminTasks = useCallback((authToken: string, query: string) => {
+    const params = new URLSearchParams({
+      page: "1",
+      limit: "50",
+    });
+
+    if (query.trim().length > 0) {
+      params.set("q", query.trim());
+    }
+
+    return apiRequest<{
+      items: AdminTaskItem[];
+      pagination: PaginationMeta;
+    }>(`/admin/tasks?${params.toString()}`, {}, authToken);
+  }, []);
+
+  const requestAdminAudit = useCallback(
+    (authToken: string) =>
+      apiRequest<{
+        items: AdminAuditItem[];
+        pagination: PaginationMeta;
+      }>("/admin/audit-log?page=1&limit=50", {}, authToken),
     [],
   );
 
@@ -438,6 +518,90 @@ function App() {
     [applyTaskMessages, detailTaskId, requestTaskMessages, token],
   );
 
+  const loadAdminUsers = useCallback(
+    async (query: string): Promise<void> => {
+      if (!token || !isAdmin) {
+        setAdminUsers([]);
+        setAdminUsersError(null);
+        setAdminUsersLoading(false);
+        return;
+      }
+
+      try {
+        setAdminUsersLoading(true);
+        setAdminUsersError(null);
+
+        const response = await requestAdminUsers(token, query);
+        setAdminUsers(response.items);
+      } catch (error) {
+        setAdminUsers([]);
+        setAdminUsersError(
+          error instanceof Error
+            ? error.message
+            : "Не удалось загрузить список пользователей",
+        );
+      } finally {
+        setAdminUsersLoading(false);
+      }
+    },
+    [isAdmin, requestAdminUsers, token],
+  );
+
+  const loadAdminTasks = useCallback(
+    async (query: string): Promise<void> => {
+      if (!token || !isAdmin) {
+        setAdminTasks([]);
+        setAdminTasksError(null);
+        setAdminTasksLoading(false);
+        return;
+      }
+
+      try {
+        setAdminTasksLoading(true);
+        setAdminTasksError(null);
+
+        const response = await requestAdminTasks(token, query);
+        setAdminTasks(response.items);
+      } catch (error) {
+        setAdminTasks([]);
+        setAdminTasksError(
+          error instanceof Error
+            ? error.message
+            : "Не удалось загрузить список задач",
+        );
+      } finally {
+        setAdminTasksLoading(false);
+      }
+    },
+    [isAdmin, requestAdminTasks, token],
+  );
+
+  const loadAdminAudit = useCallback(async (): Promise<void> => {
+    if (!token || !isAdmin) {
+      setAdminAudit([]);
+      setAdminAuditError(null);
+      setAdminAuditLoading(false);
+      return;
+    }
+
+    try {
+      setAdminAuditLoading(true);
+      setAdminAuditError(null);
+
+      const response = await requestAdminAudit(token);
+      setAdminAudit(response.items);
+    } catch (error) {
+      setAdminAudit([]);
+      setAdminAuditError(
+        error instanceof Error
+          ? error.message
+          : "Не удалось загрузить журнал аудита",
+      );
+    } finally {
+      setAdminAuditLoading(false);
+    }
+  }, [isAdmin, requestAdminAudit, token]);
+
   useEffect(() => {
     if (authLoading || !isAuthenticated || !authUser) {
       return;
@@ -537,6 +701,76 @@ function App() {
       active = false;
     };
   }, [webAppState.isTelegram, webAppState.initData]);
+
+  useEffect(() => {
+    if (!token) {
+      setIsAdmin(false);
+      setAdminAccessLoading(false);
+      setAdminAccessError(null);
+      setAdminIdentity(null);
+      setAdminUsers([]);
+      setAdminTasks([]);
+      setAdminAudit([]);
+      return;
+    }
+
+    let active = true;
+
+    const resolveAdminAccess = async (): Promise<void> => {
+      try {
+        setAdminAccessLoading(true);
+        setAdminAccessError(null);
+
+        const response = await apiRequest<{ admin: AdminIdentity }>(
+          "/admin/me",
+          {},
+          token,
+        );
+
+        if (!active) {
+          return;
+        }
+
+        setIsAdmin(true);
+        setAdminIdentity(response.admin);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setIsAdmin(false);
+        setAdminIdentity(null);
+        setAdminUsers([]);
+        setAdminTasks([]);
+        setAdminAudit([]);
+        setAdminAccessError(
+          error instanceof Error
+            ? error.message
+            : "Не удалось проверить админ-доступ",
+        );
+      } finally {
+        if (active) {
+          setAdminAccessLoading(false);
+        }
+      }
+    };
+
+    void resolveAdminAccess();
+
+    return () => {
+      active = false;
+    };
+  }, [token]);
+
+  useEffect(() => {
+    if (!token || !isAdmin) {
+      return;
+    }
+
+    void loadAdminUsers("");
+    void loadAdminTasks("");
+    void loadAdminAudit();
+  }, [isAdmin, loadAdminAudit, loadAdminTasks, loadAdminUsers, token]);
 
   useEffect(() => {
     if (!token) {
@@ -1403,6 +1637,110 @@ function App() {
     }
   };
 
+  const handleAdminToggleUserBlock = async (
+    user: AdminUserItem,
+  ): Promise<void> => {
+    if (!token || !isAdmin) {
+      return;
+    }
+
+    const nextIsBlocked = !user.isBlocked;
+    const reasonPrompt = nextIsBlocked
+      ? "Причина блокировки (необязательно):"
+      : "Причина разблокировки (необязательно):";
+    const reasonRaw = window.prompt(reasonPrompt, "");
+
+    if (reasonRaw === null) {
+      return;
+    }
+
+    try {
+      setAdminUsersError(null);
+
+      const response = await apiRequest<{ user: AdminUserItem }>(
+        `/admin/users/${user.id}/block`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            is_blocked: nextIsBlocked,
+            reason: reasonRaw.trim() || undefined,
+          }),
+        },
+        token,
+      );
+
+      setAdminUsers((prev) =>
+        prev.map((item) =>
+          item.id === response.user.id ? response.user : item,
+        ),
+      );
+      await loadAdminAudit();
+    } catch (error) {
+      setAdminUsersError(
+        error instanceof Error
+          ? error.message
+          : "Не удалось изменить блокировку пользователя",
+      );
+    }
+  };
+
+  const handleAdminModerateTaskCancel = async (
+    task: AdminTaskItem,
+  ): Promise<void> => {
+    if (!token || !isAdmin) {
+      return;
+    }
+
+    const reasonRaw = window.prompt("Причина отмены задачи:", "");
+    if (reasonRaw === null) {
+      return;
+    }
+
+    const reason = reasonRaw.trim();
+    if (!reason) {
+      setAdminTasksError("Причина обязательна для модерации задачи.");
+      return;
+    }
+
+    try {
+      setAdminTasksError(null);
+
+      const response = await apiRequest<{ task: AdminTaskItem }>(
+        `/admin/tasks/${task.id}/moderate`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            action: "CANCEL",
+            reason,
+          }),
+        },
+        token,
+      );
+
+      setAdminTasks((prev) =>
+        prev.map((item) =>
+          item.id === response.task.id ? response.task : item,
+        ),
+      );
+      setDetailTask((prev) =>
+        prev && prev.id === response.task.id
+          ? {
+              ...prev,
+              status: response.task.status,
+              updatedAt: response.task.updatedAt,
+            }
+          : prev,
+      );
+      await loadAdminAudit();
+    } catch (error) {
+      setAdminTasksError(
+        error instanceof Error
+          ? error.message
+          : "Не удалось отмодерировать задачу",
+      );
+    }
+  };
+
   const handleSendTaskMessage = async (): Promise<void> => {
     if (!token || !detailTaskId) {
       return;
@@ -1679,6 +2017,8 @@ function App() {
         onOpenExecutor={() => navigate("/account/executor")}
         onOpenBotNotifications={() => navigate("/account/bot-notifications")}
         onOpenNotificationsCenter={() => navigate("/account/notifications")}
+        isAdmin={isAdmin}
+        onOpenAdmin={() => navigate("/admin")}
       />
     );
   };
@@ -1772,6 +2112,51 @@ function App() {
         void handleReadNotification(notificationId);
       }}
       onBack={() => navigate("/account")}
+    />
+  );
+
+  const renderAdmin = (): JSX.Element => (
+    <AdminPage
+      adminAccessLoading={adminAccessLoading}
+      isAdmin={isAdmin}
+      adminAccessError={adminAccessError}
+      adminIdentity={adminIdentity}
+      activeView={adminView}
+      onChangeView={setAdminView}
+      users={adminUsers}
+      usersLoading={adminUsersLoading}
+      usersError={adminUsersError}
+      usersQuery={adminUsersQuery}
+      onUsersQueryChange={setAdminUsersQuery}
+      onUsersSearch={() => {
+        void loadAdminUsers(adminUsersQuery);
+      }}
+      onUsersReload={() => {
+        void loadAdminUsers(adminUsersQuery);
+      }}
+      onToggleUserBlock={(user) => {
+        void handleAdminToggleUserBlock(user);
+      }}
+      tasks={adminTasks}
+      tasksLoading={adminTasksLoading}
+      tasksError={adminTasksError}
+      tasksQuery={adminTasksQuery}
+      onTasksQueryChange={setAdminTasksQuery}
+      onTasksSearch={() => {
+        void loadAdminTasks(adminTasksQuery);
+      }}
+      onTasksReload={() => {
+        void loadAdminTasks(adminTasksQuery);
+      }}
+      onModerateTaskCancel={(task) => {
+        void handleAdminModerateTaskCancel(task);
+      }}
+      audit={adminAudit}
+      auditLoading={adminAuditLoading}
+      auditError={adminAuditError}
+      onAuditReload={() => {
+        void loadAdminAudit();
+      }}
     />
   );
 
@@ -2002,6 +2387,7 @@ function App() {
               <Route path="/task/:taskId" element={renderDetailTask()} />
               <Route path="/user/:userId" element={renderPublicProfile()} />
               <Route path="/account" element={renderAccountHome()} />
+              <Route path="/admin" element={renderAdmin()} />
               <Route path="/account/avatar" element={renderAccountAvatar()} />
               <Route path="/account/role" element={renderAccountRole()} />
               <Route

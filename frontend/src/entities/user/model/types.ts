@@ -26,6 +26,10 @@ export type PublicUser = {
   username: string | null;
   displayName: string;
   primaryRole: PrimaryRoleValue | null;
+  roleFlags: unknown;
+  isBlocked: boolean;
+  createdAt: string;
+  updatedAt: string;
   profile: {
     about: string | null;
     skills: string[];

@@ -68,6 +68,8 @@ type AccountHomeScreenProps = {
   onOpenExecutor: () => void;
   onOpenBotNotifications: () => void;
   onOpenNotificationsCenter: () => void;
+  isAdmin: boolean;
+  onOpenAdmin: () => void;
 };
 
 export const AccountHomeScreen = ({
@@ -82,6 +84,8 @@ export const AccountHomeScreen = ({
   onOpenExecutor,
   onOpenBotNotifications,
   onOpenNotificationsCenter,
+  isAdmin,
+  onOpenAdmin,
 }: AccountHomeScreenProps): JSX.Element => {
   const hasProfile = Boolean(authUser.profile);
 
@@ -171,6 +175,16 @@ export const AccountHomeScreen = ({
           >
             Центр уведомлений
           </Cell>
+          {isAdmin ? (
+            <Cell
+              before={<ShieldCheck size={18} />}
+              subtitle="Модерация пользователей и задач"
+              after={accountMenuAfter("Открыть")}
+              onClick={onOpenAdmin}
+            >
+              Админка
+            </Cell>
+          ) : null}
         </List>
       </Section>
     </>

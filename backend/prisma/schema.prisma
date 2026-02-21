@@ -34,6 +34,16 @@ enum ExperienceLevel {
   SENIOR
 }
 
+enum AdminAuditAction {
+  USER_BLOCK_CHANGED
+  TASK_MODERATED
+}
+
+enum AdminAuditTargetType {
+  USER
+  TASK
+}
+
 model User {
   id                  String              @id @default(uuid()) @db.Uuid
   telegramId          BigInt              @unique @map("telegram_id")
@@ -51,6 +61,7 @@ model User {
   changedTaskStatuses TaskStatusHistory[] @relation("ChangedTaskStatuses")
   notifications       Notification[]      @relation("UserNotifications")
   taskMessages        TaskMessage[]       @relation("TaskMessages")
+  adminAuditLogs      AdminAuditLog[]     @relation("AdminActorLogs")
 
   @@map("users")
 }
@@ -177,4 +188,21 @@ model TaskMessage {
   @@index([taskId, createdAt])
   @@index([senderId])
   @@map("task_messages")
+}
+
+model AdminAuditLog {
+  id         String               @id @default(uuid()) @db.Uuid
+  adminUserId String              @map("admin_user_id") @db.Uuid
+  action     AdminAuditAction
+  targetType AdminAuditTargetType @map("target_type")
+  targetId   String               @map("target_id") @db.Uuid
+  reason     String?
+  meta       Json?
+  createdAt  DateTime             @default(now()) @map("created_at")
+  adminUser  User                 @relation("AdminActorLogs", fields: [adminUserId], references: [id], onDelete: Restrict)
+
+  @@index([adminUserId, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([action, createdAt])
+  @@map("admin_audit_logs")
 }
