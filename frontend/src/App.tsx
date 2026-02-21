@@ -435,7 +435,7 @@ function App() {
 
   const location = useLocation();
   const navigate = useNavigate();
-  const taskMatch = useMatch("/tasks/:taskId");
+  const taskMatch = useMatch("/task/:taskId");
   const detailTaskId = taskMatch?.params.taskId ?? null;
 
   const [token, setToken] = useState<string | null>(() => {
@@ -488,9 +488,9 @@ function App() {
   const [selectPendingId, setSelectPendingId] = useState<string | null>(null);
 
   const isAuthenticated = Boolean(token);
-  const activeTab: TabState = location.pathname.startsWith("/profile")
+  const activeTab: TabState = location.pathname.startsWith("/account")
     ? "profile"
-    : location.pathname === "/tasks/new"
+    : location.pathname === "/create"
       ? "create"
       : "list";
 
@@ -508,7 +508,7 @@ function App() {
 
   useEffect(() => {
     if (location.pathname === "/") {
-      navigate("/tasks", { replace: true });
+      navigate("/feed", { replace: true });
     }
   }, [location.pathname, navigate]);
 
@@ -732,17 +732,17 @@ function App() {
 
   const switchTab = (tab: TabState): void => {
     if (tab === "list") {
-      navigate("/tasks");
+      navigate("/feed");
       return;
     }
 
     if (tab === "create") {
       setCreateError(null);
-      navigate("/tasks/new");
+      navigate("/create");
       return;
     }
 
-    navigate("/profile");
+    navigate("/account");
   };
 
   const handleApplyFilters = (): void => {
@@ -757,7 +757,7 @@ function App() {
   };
 
   const openTaskDetail = (taskId: string): void => {
-    navigate(`/tasks/${taskId}`);
+    navigate(`/task/${taskId}`);
   };
 
   const handleCreateTask = async (): Promise<void> => {
@@ -797,7 +797,7 @@ function App() {
       setPage(1);
       setFilterApplied((prev) => ({ ...prev, status: "OPEN" }));
       setFilterDraft((prev) => ({ ...prev, status: "OPEN" }));
-      navigate(`/tasks/${result.task.id}`);
+      navigate(`/task/${result.task.id}`);
     } catch (error) {
       setCreateError(
         error instanceof Error ? error.message : "Не удалось создать задачу",
@@ -1148,7 +1148,7 @@ function App() {
           <Button size="m" mode="outline" onClick={handleResetFilters}>
             Сбросить
           </Button>
-          <Button size="m" mode="bezeled" onClick={() => navigate("/tasks/new")}>
+          <Button size="m" mode="bezeled" onClick={() => navigate("/create")}>
             Создать задачу
           </Button>
         </div>
@@ -1277,7 +1277,7 @@ function App() {
         >
           {createPending ? "Публикуем..." : "Опубликовать задачу"}
         </Button>
-        <Button mode="outline" size="l" onClick={() => navigate("/tasks") }>
+        <Button mode="outline" size="l" onClick={() => navigate("/feed") }>
           Назад к ленте
         </Button>
       </div>
@@ -1502,7 +1502,7 @@ function App() {
           </List>
 
           <div className="row-actions">
-            <Button mode="outline" onClick={() => navigate("/tasks") }>
+            <Button mode="outline" onClick={() => navigate("/feed") }>
               К ленте
             </Button>
             {canEdit ? (
@@ -1681,12 +1681,12 @@ function App() {
             authGate
           ) : (
             <Routes>
-              <Route path="/" element={<Navigate to="/tasks" replace />} />
-              <Route path="/tasks" element={renderTasksList()} />
-              <Route path="/tasks/new" element={renderCreateTask()} />
-              <Route path="/tasks/:taskId" element={renderDetailTask()} />
-              <Route path="/profile" element={renderProfile()} />
-              <Route path="*" element={<Navigate to="/tasks" replace />} />
+              <Route path="/" element={<Navigate to="/feed" replace />} />
+              <Route path="/feed" element={renderTasksList()} />
+              <Route path="/create" element={renderCreateTask()} />
+              <Route path="/task/:taskId" element={renderDetailTask()} />
+              <Route path="/account" element={renderProfile()} />
+              <Route path="*" element={<Navigate to="/feed" replace />} />
             </Routes>
           )}
         </div>
