@@ -430,6 +430,48 @@ const parseStatusFilter = (value: unknown): TaskStatus => {
   return status;
 };
 
+type TaskStatusTransition = {
+  taskId: string;
+  fromStatus: TaskStatus | null;
+  toStatus: TaskStatus;
+  changedBy: string;
+  comment?: string | null;
+};
+
+const createTaskStatusHistory = async (
+  tx: Prisma.TransactionClient,
+  transition: TaskStatusTransition,
+): Promise<void> => {
+  if (transition.fromStatus === transition.toStatus) {
+    return;
+  }
+
+  await tx.taskStatusHistory.create({
+    data: {
+      taskId: transition.taskId,
+      fromStatus: transition.fromStatus,
+      toStatus: transition.toStatus,
+      changedBy: transition.changedBy,
+      comment: transition.comment ?? null,
+    },
+  });
+};
+
+const updateTaskStatusWithHistory = async (
+  tx: Prisma.TransactionClient,
+  transition: TaskStatusTransition,
+): Promise<TaskView> => {
+  const updatedTask = await tx.task.update({
+    where: { id: transition.taskId },
+    data: { status: transition.toStatus },
+    select: taskSelect,
+  });
+
+  await createTaskStatusHistory(tx, transition);
+
+  return updatedTask;
+};
+
 export const tasksRouter = Router();
 
 tasksRouter.post("/", requireAuth, async (req, res, next) => {
@@ -439,18 +481,29 @@ tasksRouter.post("/", requireAuth, async (req, res, next) => {
     const authUser = getAuthUser(res);
     const payload = parseRequiredTaskCreate(req.body as TaskCreatePayload);
 
-    const task = await prisma.task.create({
-      data: {
-        customerId: authUser.id,
-        title: payload.title,
-        description: payload.description,
-        budget: payload.budget,
-        deadlineAt: payload.deadline,
-        category: payload.category,
-        tags: payload.tags,
-        status: TaskStatus.OPEN,
-      },
-      select: taskSelect,
+    const task = await prisma.$transaction(async (tx) => {
+      const createdTask = await tx.task.create({
+        data: {
+          customerId: authUser.id,
+          title: payload.title,
+          description: payload.description,
+          budget: payload.budget,
+          deadlineAt: payload.deadline,
+          category: payload.category,
+          tags: payload.tags,
+          status: TaskStatus.OPEN,
+        },
+        select: taskSelect,
+      });
+
+      await createTaskStatusHistory(tx, {
+        taskId: createdTask.id,
+        fromStatus: null,
+        toStatus: TaskStatus.OPEN,
+        changedBy: authUser.id,
+      });
+
+      return createdTask;
     });
 
     res.status(201).json({
@@ -786,12 +839,11 @@ tasksRouter.post(
             },
           });
 
-          return tx.task.update({
-            where: { id: taskId },
-            data: {
-              status: TaskStatus.IN_PROGRESS,
-            },
-            select: taskSelect,
+          return updateTaskStatusWithHistory(tx, {
+            taskId,
+            fromStatus: task.status,
+            toStatus: TaskStatus.IN_PROGRESS,
+            changedBy: authUser.id,
           });
         });
       } catch (error) {
@@ -819,6 +871,62 @@ tasksRouter.post(
     }
   },
 );
+
+tasksRouter.post("/:id/send-to-review", requireAuth, async (req, res, next) => {
+  try {
+    const taskId = parseTaskIdOrThrow(req.params.id);
+    const authUser = getAuthUser(res);
+
+    const task = await prisma.$transaction(async (tx) => {
+      const existingTask = await tx.task.findUnique({
+        where: { id: taskId },
+        select: {
+          id: true,
+          status: true,
+          assignment: {
+            select: {
+              executorId: true,
+            },
+          },
+        },
+      });
+
+      if (!existingTask) {
+        throw new HttpError(404, "NOT_FOUND", "Task not found");
+      }
+
+      assertValidation(
+        existingTask.status === TaskStatus.IN_PROGRESS,
+        "Only IN_PROGRESS tasks can be sent to review",
+      );
+      assertValidation(
+        !!existingTask.assignment,
+        "Task has no assigned executor",
+      );
+
+      if (existingTask.assignment?.executorId !== authUser.id) {
+        throw new HttpError(
+          403,
+          "FORBIDDEN",
+          "Only assigned executor can send task to review",
+        );
+      }
+
+      return updateTaskStatusWithHistory(tx, {
+        taskId,
+        fromStatus: existingTask.status,
+        toStatus: TaskStatus.ON_REVIEW,
+        changedBy: authUser.id,
+      });
+    });
+
+    res.status(200).json({
+      task: mapTask(task),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 tasksRouter.get("/:id", requireAuth, async (req, res, next) => {
   try {
@@ -925,13 +1033,14 @@ tasksRouter.post("/:id/cancel", requireAuth, async (req, res, next) => {
       "Only OPEN tasks can be canceled",
     );
 
-    const task = await prisma.task.update({
-      where: { id: taskId },
-      data: {
-        status: TaskStatus.CANCELED,
-      },
-      select: taskSelect,
-    });
+    const task = await prisma.$transaction((tx) =>
+      updateTaskStatusWithHistory(tx, {
+        taskId,
+        fromStatus: existingTask.status,
+        toStatus: TaskStatus.CANCELED,
+        changedBy: authUser.id,
+      }),
+    );
 
     res.status(200).json({
       task: mapTask(task),
