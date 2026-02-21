@@ -148,6 +148,12 @@ type ProposalItem = {
     id: string;
     username: string | null;
     displayName: string;
+    profile: {
+      about: string | null;
+      skills: string[];
+      rating: number;
+      completedTasksCount: number;
+    } | null;
   } | null;
 };
 
@@ -290,10 +296,7 @@ const getAcronym = (user?: TgUser): string => {
   return `${first}${second}`.toUpperCase();
 };
 
-const getDisplayAcronym = (
-  displayName: string,
-  username?: string | null,
-): string => {
+const getDisplayAcronym = (displayName: string): string => {
   const parts = displayName
     .trim()
     .split(/\s+/)
@@ -305,10 +308,6 @@ const getDisplayAcronym = (
 
   if (parts.length === 1 && parts[0].length >= 2) {
     return parts[0].slice(0, 2).toUpperCase();
-  }
-
-  if (username && username.length >= 2) {
-    return username.slice(0, 2).toUpperCase();
   }
 
   return "TG";
@@ -382,6 +381,9 @@ const formatMoney = (value: number): string =>
     currency: "RUB",
     maximumFractionDigits: 0,
   }).format(value);
+
+const formatRating = (value: number): string =>
+  Number.isFinite(value) ? value.toFixed(1) : "0.0";
 
 const formatDate = (value: string | null): string => {
   if (!value) {
@@ -1701,9 +1703,7 @@ function App() {
           <List>
             <Cell
               before={<Avatar size={48} acronym={profileAcronym} />}
-              subtitle={
-                authUser.username ? `@${authUser.username}` : "без username"
-              }
+              subtitle="Telegram-пользователь"
               description={
                 webAppState.isTelegram
                   ? "Сессия Telegram активна"
@@ -1878,10 +1878,7 @@ function App() {
     }
 
     const publicProfile = publicProfileUser.profile;
-    const publicAcronym = getDisplayAcronym(
-      publicProfileUser.displayName,
-      publicProfileUser.username,
-    );
+    const publicAcronym = getDisplayAcronym(publicProfileUser.displayName);
 
     return (
       <>
@@ -1892,11 +1889,7 @@ function App() {
           <List>
             <Cell
               before={<Avatar size={48} acronym={publicAcronym} />}
-              subtitle={
-                publicProfileUser.username
-                  ? `@${publicProfileUser.username}`
-                  : "без username"
-              }
+              subtitle="Пользователь платформы"
               description={`Приоритет: ${toRoleLabel(publicProfileUser.primaryRole)}`}
             >
               {publicProfileUser.displayName}
@@ -2294,15 +2287,50 @@ function App() {
             <div className="proposal-list">
               {proposals.map((proposal) => {
                 const executorId = proposal.executor?.id ?? null;
+                const executorProfile = proposal.executor?.profile ?? null;
+                const executorAcronym = getDisplayAcronym(
+                  proposal.executor?.displayName ?? "Исполнитель",
+                );
+                const skillPreview =
+                  executorProfile && executorProfile.skills.length > 0
+                    ? executorProfile.skills.slice(0, 5)
+                    : [];
 
                 return (
                   <div key={proposal.id} className="proposal-card">
-                    <p className="proposal-title">
-                      {proposal.executor?.displayName ?? "Исполнитель"}
-                    </p>
+                    <div className="proposal-head">
+                      <Avatar size={36} acronym={executorAcronym} />
+                      <div className="proposal-head-main">
+                        <p className="proposal-title">
+                          {proposal.executor?.displayName ?? "Исполнитель"}
+                        </p>
+                        <p className="proposal-mini-meta">
+                          Рейтинг: {formatRating(executorProfile?.rating ?? 0)}{" "}
+                          • Завершено:{" "}
+                          {String(executorProfile?.completedTasksCount ?? 0)}
+                        </p>
+                      </div>
+                    </div>
                     <p className="proposal-meta">
                       {formatMoney(proposal.price)} • {proposal.etaDays} дн.
                     </p>
+                    {skillPreview.length > 0 ? (
+                      <div className="proposal-skill-row">
+                        {skillPreview.map((skill) => (
+                          <span
+                            key={`${proposal.id}-${skill}`}
+                            className="proposal-skill-chip"
+                          >
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {executorProfile?.about ? (
+                      <p className="proposal-mini-about">
+                        {trimText(executorProfile.about, 110)}
+                      </p>
+                    ) : null}
                     <p className="proposal-comment">{proposal.comment}</p>
                     <div className="proposal-actions">
                       {executorId ? (
@@ -2512,11 +2540,7 @@ function App() {
             {detailCustomer ? (
               <Cell
                 subtitle="Заказчик"
-                description={
-                  detailCustomer.username
-                    ? `@${detailCustomer.username}`
-                    : "без username"
-                }
+                description="Публичный профиль"
                 after="Открыть"
                 onClick={() => openUserProfile(detailCustomer.id)}
               >
@@ -2666,9 +2690,7 @@ function App() {
           ) : (
             <div className="status-history-list">
               {statusHistory.map((entry) => {
-                const actorLabel = entry.changedByUser.username
-                  ? `@${entry.changedByUser.username}`
-                  : entry.changedByUser.displayName;
+                const actorLabel = entry.changedByUser.displayName;
 
                 return (
                   <div key={entry.id} className="status-history-card">

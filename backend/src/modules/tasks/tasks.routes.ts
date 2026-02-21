@@ -97,6 +97,14 @@ const proposalSelect = {
       id: true,
       username: true,
       displayName: true,
+      profile: {
+        select: {
+          about: true,
+          skills: true,
+          rating: true,
+          completedTasksCount: true,
+        },
+      },
     },
   },
 } satisfies Prisma.ProposalSelect;
@@ -394,6 +402,15 @@ const mapProposal = (proposal: ProposalView) => ({
         id: proposal.executor.id,
         username: proposal.executor.username,
         displayName: proposal.executor.displayName,
+        profile: proposal.executor.profile
+          ? {
+              about: proposal.executor.profile.about,
+              skills: proposal.executor.profile.skills,
+              rating: Number(proposal.executor.profile.rating.toString()),
+              completedTasksCount:
+                proposal.executor.profile.completedTasksCount,
+            }
+          : null,
       }
     : null,
 });
