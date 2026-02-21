@@ -10,7 +10,7 @@ import {
   Placeholder,
   Section,
   Textarea,
-} from "@telegram-apps/telegram-ui";
+} from "./ui";
 import {
   Navigate,
   Route,
