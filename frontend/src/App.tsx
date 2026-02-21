@@ -11,6 +11,14 @@ import {
   Section,
   Textarea,
 } from "@telegram-apps/telegram-ui";
+import {
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useMatch,
+  useNavigate,
+} from "react-router-dom";
 
 import "./App.css";
 
@@ -72,6 +80,22 @@ type TaskItem = {
   } | null;
 };
 
+type ProposalItem = {
+  id: string;
+  taskId: string;
+  executorId: string;
+  price: number;
+  comment: string;
+  etaDays: number;
+  createdAt: string;
+  updatedAt: string;
+  executor: {
+    id: string;
+    username: string | null;
+    displayName: string;
+  } | null;
+};
+
 type SortValue = "new" | "budget" | "budget_asc" | "budget_desc";
 
 type TaskFilters = {
@@ -83,7 +107,7 @@ type TaskFilters = {
   status: TaskStatusValue;
 };
 
-type CreateTaskForm = {
+type TaskForm = {
   title: string;
   description: string;
   budget: string;
@@ -92,13 +116,11 @@ type CreateTaskForm = {
   tags: string;
 };
 
-type EditTaskForm = CreateTaskForm;
-
-type ViewState =
-  | { screen: "list" }
-  | { screen: "create" }
-  | { screen: "profile" }
-  | { screen: "detail"; taskId: string };
+type ProposalForm = {
+  price: string;
+  comment: string;
+  etaDays: string;
+};
 
 type TabState = "list" | "create" | "profile";
 
@@ -113,13 +135,19 @@ const DEFAULT_FILTERS: TaskFilters = {
   status: "OPEN",
 };
 
-const DEFAULT_CREATE_FORM: CreateTaskForm = {
+const DEFAULT_TASK_FORM: TaskForm = {
   title: "",
   description: "",
   budget: "",
   category: "",
   deadlineAt: "",
   tags: "",
+};
+
+const DEFAULT_PROPOSAL_FORM: ProposalForm = {
+  price: "",
+  comment: "",
+  etaDays: "",
 };
 
 const STATUS_OPTIONS: Array<{ value: TaskStatusValue; label: string }> = [
@@ -134,7 +162,6 @@ const SORT_OPTIONS: Array<{ value: SortValue; label: string }> = [
   { value: "new", label: "Сначала новые" },
   { value: "budget", label: "Дороже сверху" },
   { value: "budget_asc", label: "Дешевле сверху" },
-  { value: "budget_desc", label: "Дороже сверху (alt)" },
 ];
 
 const getApiBaseUrl = (): string => {
@@ -336,7 +363,7 @@ const trimText = (value: string, max = 130): string => {
   return `${prepared.slice(0, max)}...`;
 };
 
-const validateTaskForm = (form: CreateTaskForm): string | null => {
+const validateTaskForm = (form: TaskForm): string | null => {
   if (form.title.trim().length < 4) {
     return "Заголовок должен быть не короче 4 символов";
   }
@@ -352,6 +379,24 @@ const validateTaskForm = (form: CreateTaskForm): string | null => {
   const budget = Number(form.budget);
   if (!Number.isFinite(budget) || budget <= 0) {
     return "Бюджет должен быть числом больше 0";
+  }
+
+  return null;
+};
+
+const validateProposalForm = (form: ProposalForm): string | null => {
+  const price = Number(form.price);
+  if (!Number.isFinite(price) || price <= 0) {
+    return "Цена отклика должна быть больше 0";
+  }
+
+  if (form.comment.trim().length < 5) {
+    return "Комментарий к отклику должен быть не короче 5 символов";
+  }
+
+  const eta = Number(form.etaDays);
+  if (!Number.isInteger(eta) || eta <= 0) {
+    return "Срок должен быть целым числом дней";
   }
 
   return null;
@@ -388,7 +433,10 @@ function App() {
   const webAppState = useMemo(() => getSafeState(), []);
   const profileAcronym = useMemo(() => getAcronym(webAppState.user), [webAppState.user]);
 
-  const [view, setView] = useState<ViewState>({ screen: "list" });
+  const location = useLocation();
+  const navigate = useNavigate();
+  const taskMatch = useMatch("/tasks/:taskId");
+  const detailTaskId = taskMatch?.params.taskId ?? null;
 
   const [token, setToken] = useState<string | null>(() => {
     if (typeof window === "undefined") {
@@ -415,20 +463,54 @@ function App() {
     totalPages: 0,
   });
 
-  const [createForm, setCreateForm] = useState<CreateTaskForm>(DEFAULT_CREATE_FORM);
+  const [createForm, setCreateForm] = useState<TaskForm>(DEFAULT_TASK_FORM);
   const [createPending, setCreatePending] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
   const [detailTask, setDetailTask] = useState<TaskItem | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+
   const [editMode, setEditMode] = useState(false);
   const [editPending, setEditPending] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<EditTaskForm>(DEFAULT_CREATE_FORM);
+  const [editForm, setEditForm] = useState<TaskForm>(DEFAULT_TASK_FORM);
+
+  const [proposals, setProposals] = useState<ProposalItem[]>([]);
+  const [proposalsLoading, setProposalsLoading] = useState(false);
+  const [proposalsError, setProposalsError] = useState<string | null>(null);
+
+  const [proposalForm, setProposalForm] = useState<ProposalForm>(DEFAULT_PROPOSAL_FORM);
+  const [proposalPending, setProposalPending] = useState(false);
+  const [proposalError, setProposalError] = useState<string | null>(null);
+  const [proposalEditMode, setProposalEditMode] = useState(false);
+
+  const [selectPendingId, setSelectPendingId] = useState<string | null>(null);
 
   const isAuthenticated = Boolean(token);
-  const activeTab: TabState = view.screen === "detail" ? "list" : view.screen;
+  const activeTab: TabState = location.pathname.startsWith("/profile")
+    ? "profile"
+    : location.pathname === "/tasks/new"
+      ? "create"
+      : "list";
+
+  const isDetailOwner = Boolean(
+    authUser && detailTask && detailTask.customerId === authUser.id,
+  );
+
+  const ownProposal = useMemo(() => {
+    if (!authUser) {
+      return null;
+    }
+
+    return proposals.find((proposal) => proposal.executorId === authUser.id) ?? null;
+  }, [proposals, authUser]);
+
+  useEffect(() => {
+    if (location.pathname === "/") {
+      navigate("/tasks", { replace: true });
+    }
+  }, [location.pathname, navigate]);
 
   useEffect(() => {
     let active = true;
@@ -554,19 +636,33 @@ function App() {
   }, [token, page, filterApplied]);
 
   useEffect(() => {
-    if (!token || view.screen !== "detail") {
+    setDetailTask(null);
+    setDetailError(null);
+    setEditMode(false);
+    setEditError(null);
+    setProposals([]);
+    setProposalsError(null);
+    setProposalForm(DEFAULT_PROPOSAL_FORM);
+    setProposalError(null);
+    setProposalEditMode(false);
+  }, [detailTaskId]);
+
+  useEffect(() => {
+    if (!token || !detailTaskId) {
       return;
     }
 
     let active = true;
 
-    const loadDetail = async (): Promise<void> => {
+    const loadDetailAndProposals = async (): Promise<void> => {
       try {
         setDetailLoading(true);
+        setProposalsLoading(true);
         setDetailError(null);
+        setProposalsError(null);
 
-        const response = await apiRequest<{ task: TaskItem }>(
-          `/tasks/${view.taskId}`,
+        const taskResponse = await apiRequest<{ task: TaskItem }>(
+          `/tasks/${detailTaskId}`,
           {},
           token,
         );
@@ -575,15 +671,42 @@ function App() {
           return;
         }
 
-        setDetailTask(response.task);
+        setDetailTask(taskResponse.task);
         setEditForm({
-          title: response.task.title,
-          description: response.task.description,
-          budget: String(response.task.budget),
-          category: response.task.category,
-          deadlineAt: toInputDateTimeValue(response.task.deadlineAt),
-          tags: response.task.tags.join(", "),
+          title: taskResponse.task.title,
+          description: taskResponse.task.description,
+          budget: String(taskResponse.task.budget),
+          category: taskResponse.task.category,
+          deadlineAt: toInputDateTimeValue(taskResponse.task.deadlineAt),
+          tags: taskResponse.task.tags.join(", "),
         });
+
+        try {
+          const proposalsResponse = await apiRequest<{ items: ProposalItem[] }>(
+            `/tasks/${detailTaskId}/proposals`,
+            {},
+            token,
+          );
+
+          if (!active) {
+            return;
+          }
+
+          setProposals(proposalsResponse.items);
+        } catch (error) {
+          if (!active) {
+            return;
+          }
+
+          const message =
+            error instanceof Error ? error.message : "Не удалось загрузить отклики";
+
+          if (message.includes("Only task owner or proposal author can view proposals")) {
+            setProposals([]);
+          } else {
+            setProposalsError(message);
+          }
+        }
       } catch (error) {
         if (!active) {
           return;
@@ -595,33 +718,31 @@ function App() {
       } finally {
         if (active) {
           setDetailLoading(false);
+          setProposalsLoading(false);
         }
       }
     };
 
-    void loadDetail();
+    void loadDetailAndProposals();
 
     return () => {
       active = false;
     };
-  }, [token, view]);
+  }, [token, detailTaskId]);
 
   const switchTab = (tab: TabState): void => {
-    setDetailError(null);
-    setEditMode(false);
-
     if (tab === "list") {
-      setView({ screen: "list" });
+      navigate("/tasks");
       return;
     }
 
     if (tab === "create") {
       setCreateError(null);
-      setView({ screen: "create" });
+      navigate("/tasks/new");
       return;
     }
 
-    setView({ screen: "profile" });
+    navigate("/profile");
   };
 
   const handleApplyFilters = (): void => {
@@ -636,10 +757,7 @@ function App() {
   };
 
   const openTaskDetail = (taskId: string): void => {
-    setDetailTask(null);
-    setDetailError(null);
-    setEditMode(false);
-    setView({ screen: "detail", taskId });
+    navigate(`/tasks/${taskId}`);
   };
 
   const handleCreateTask = async (): Promise<void> => {
@@ -675,11 +793,11 @@ function App() {
         token,
       );
 
-      setCreateForm(DEFAULT_CREATE_FORM);
-      setView({ screen: "detail", taskId: result.task.id });
+      setCreateForm(DEFAULT_TASK_FORM);
       setPage(1);
       setFilterApplied((prev) => ({ ...prev, status: "OPEN" }));
       setFilterDraft((prev) => ({ ...prev, status: "OPEN" }));
+      navigate(`/tasks/${result.task.id}`);
     } catch (error) {
       setCreateError(
         error instanceof Error ? error.message : "Не удалось создать задачу",
@@ -690,7 +808,7 @@ function App() {
   };
 
   const handleSaveTaskEdits = async (): Promise<void> => {
-    if (!token || view.screen !== "detail" || !detailTask) {
+    if (!token || !detailTaskId || !detailTask) {
       return;
     }
 
@@ -714,7 +832,7 @@ function App() {
       };
 
       const response = await apiRequest<{ task: TaskItem }>(
-        `/tasks/${view.taskId}`,
+        `/tasks/${detailTaskId}`,
         {
           method: "PATCH",
           body: JSON.stringify(payload),
@@ -735,7 +853,7 @@ function App() {
   };
 
   const handleCancelTask = async (): Promise<void> => {
-    if (!token || view.screen !== "detail" || !detailTask) {
+    if (!token || !detailTaskId || !detailTask) {
       return;
     }
 
@@ -746,7 +864,7 @@ function App() {
 
     try {
       const response = await apiRequest<{ task: TaskItem }>(
-        `/tasks/${view.taskId}/cancel`,
+        `/tasks/${detailTaskId}/cancel`,
         {
           method: "POST",
         },
@@ -763,33 +881,152 @@ function App() {
     }
   };
 
-  const renderAuthState = (): JSX.Element => {
-    if (authLoading) {
-      return (
-        <Section>
-          <Placeholder
-            header="Авторизация"
-            description="Подключаем профиль Telegram..."
-          />
-        </Section>
-      );
+  const handleCreateProposal = async (): Promise<void> => {
+    if (!token || !detailTaskId) {
+      return;
     }
 
-    if (!isAuthenticated || !authUser) {
-      return (
-        <Section>
-          <Placeholder
-            header="Нет доступа"
-            description={
-              authError ??
-              "Открой миниапп внутри Telegram, чтобы авторизоваться и работать с задачами."
-            }
-          />
-        </Section>
-      );
+    const validationError = validateProposalForm(proposalForm);
+    if (validationError) {
+      setProposalError(validationError);
+      return;
     }
 
-    return <></>;
+    try {
+      setProposalPending(true);
+      setProposalError(null);
+
+      const response = await apiRequest<{ proposal: ProposalItem }>(
+        `/tasks/${detailTaskId}/proposals`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            price: Number(proposalForm.price),
+            comment: proposalForm.comment.trim(),
+            eta_days: Number(proposalForm.etaDays),
+          }),
+        },
+        token,
+      );
+
+      setProposals([response.proposal]);
+      setProposalForm({
+        price: String(response.proposal.price),
+        comment: response.proposal.comment,
+        etaDays: String(response.proposal.etaDays),
+      });
+      setProposalEditMode(false);
+    } catch (error) {
+      setProposalError(
+        error instanceof Error ? error.message : "Не удалось отправить отклик",
+      );
+    } finally {
+      setProposalPending(false);
+    }
+  };
+
+  const handleUpdateProposal = async (): Promise<void> => {
+    if (!token || !ownProposal) {
+      return;
+    }
+
+    const validationError = validateProposalForm(proposalForm);
+    if (validationError) {
+      setProposalError(validationError);
+      return;
+    }
+
+    try {
+      setProposalPending(true);
+      setProposalError(null);
+
+      const response = await apiRequest<{ proposal: ProposalItem }>(
+        `/proposals/${ownProposal.id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            price: Number(proposalForm.price),
+            comment: proposalForm.comment.trim(),
+            eta_days: Number(proposalForm.etaDays),
+          }),
+        },
+        token,
+      );
+
+      setProposals((prev) =>
+        prev.map((proposal) =>
+          proposal.id === response.proposal.id ? response.proposal : proposal,
+        ),
+      );
+      setProposalEditMode(false);
+    } catch (error) {
+      setProposalError(
+        error instanceof Error ? error.message : "Не удалось обновить отклик",
+      );
+    } finally {
+      setProposalPending(false);
+    }
+  };
+
+  const handleDeleteProposal = async (): Promise<void> => {
+    if (!token || !ownProposal) {
+      return;
+    }
+
+    const confirmed = window.confirm("Удалить свой отклик?");
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setProposalPending(true);
+      setProposalError(null);
+
+      await apiRequest<void>(
+        `/proposals/${ownProposal.id}`,
+        {
+          method: "DELETE",
+        },
+        token,
+      );
+
+      setProposals([]);
+      setProposalForm(DEFAULT_PROPOSAL_FORM);
+      setProposalEditMode(false);
+    } catch (error) {
+      setProposalError(
+        error instanceof Error ? error.message : "Не удалось удалить отклик",
+      );
+    } finally {
+      setProposalPending(false);
+    }
+  };
+
+  const handleSelectProposal = async (proposalId: string): Promise<void> => {
+    if (!token || !detailTaskId) {
+      return;
+    }
+
+    try {
+      setSelectPendingId(proposalId);
+
+      const response = await apiRequest<{ task: TaskItem }>(
+        `/tasks/${detailTaskId}/select-proposal`,
+        {
+          method: "POST",
+          body: JSON.stringify({ proposal_id: proposalId }),
+        },
+        token,
+      );
+
+      setDetailTask(response.task);
+    } catch (error) {
+      setProposalsError(
+        error instanceof Error ? error.message : "Не удалось выбрать исполнителя",
+      );
+    } finally {
+      setSelectPendingId(null);
+    }
   };
 
   const renderProfile = (): JSX.Element => {
@@ -814,10 +1051,16 @@ function App() {
           >
             {authUser.displayName}
           </Cell>
-          <Cell subtitle="Статус профиля" after={authUser.profile ? "Заполнен" : "Пустой"}>
+          <Cell
+            subtitle="Статус профиля"
+            after={authUser.profile ? "Заполнен" : "Пустой"}
+          >
             Профиль в системе
           </Cell>
-          <Cell subtitle="Завершено задач" after={String(authUser.profile?.completedTasksCount ?? 0)}>
+          <Cell
+            subtitle="Завершено задач"
+            after={String(authUser.profile?.completedTasksCount ?? 0)}
+          >
             Рейтинг
           </Cell>
         </List>
@@ -905,7 +1148,7 @@ function App() {
           <Button size="m" mode="outline" onClick={handleResetFilters}>
             Сбросить
           </Button>
-          <Button size="m" mode="bezeled" onClick={() => switchTab("create")}>
+          <Button size="m" mode="bezeled" onClick={() => navigate("/tasks/new")}>
             Создать задачу
           </Button>
         </div>
@@ -952,7 +1195,9 @@ function App() {
           <Button
             mode="outline"
             size="m"
-            disabled={listLoading || page >= pagination.totalPages || pagination.totalPages === 0}
+            disabled={
+              listLoading || page >= pagination.totalPages || pagination.totalPages === 0
+            }
             onClick={() => setPage((prev) => prev + 1)}
           >
             Вперед
@@ -1032,12 +1277,176 @@ function App() {
         >
           {createPending ? "Публикуем..." : "Опубликовать задачу"}
         </Button>
-        <Button mode="outline" size="l" onClick={() => switchTab("list")}>
+        <Button mode="outline" size="l" onClick={() => navigate("/tasks") }>
           Назад к ленте
         </Button>
       </div>
     </Section>
   );
+
+  const renderProposalsBlock = (): JSX.Element => {
+    if (!detailTask || !authUser) {
+      return <></>;
+    }
+
+    const canManageOwnProposal =
+      detailTask.customerId !== authUser.id && detailTask.status === "OPEN";
+    const canSelectExecutor =
+      detailTask.customerId === authUser.id && detailTask.status === "OPEN";
+
+    return (
+      <Section
+        header={isDetailOwner ? `Отклики (${proposals.length})` : "Мой отклик"}
+        footer={
+          isDetailOwner
+            ? "Выбери одного исполнителя. После выбора задача перейдет в статус «В работе»."
+            : "Отклик можно изменить или удалить, пока заказчик не выбрал исполнителя."
+        }
+      >
+        {proposalsLoading ? (
+          <Placeholder header="Загрузка" description="Получаем отклики..." />
+        ) : proposalsError ? (
+          <Placeholder header="Ошибка" description={proposalsError} />
+        ) : isDetailOwner ? (
+          proposals.length === 0 ? (
+            <Placeholder
+              header="Откликов нет"
+              description="Исполнители еще не откликнулись на задачу"
+            />
+          ) : (
+            <div className="proposal-list">
+              {proposals.map((proposal) => (
+                <div key={proposal.id} className="proposal-card">
+                  <p className="proposal-title">
+                    {proposal.executor?.displayName ?? "Исполнитель"}
+                  </p>
+                  <p className="proposal-meta">
+                    {formatMoney(proposal.price)} • {proposal.etaDays} дн.
+                  </p>
+                  <p className="proposal-comment">{proposal.comment}</p>
+                  <div className="proposal-actions">
+                    <Button
+                      mode="filled"
+                      size="s"
+                      disabled={!canSelectExecutor || selectPendingId === proposal.id}
+                      onClick={() => {
+                        void handleSelectProposal(proposal.id);
+                      }}
+                    >
+                      {selectPendingId === proposal.id ? "Выбираем..." : "Выбрать"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        ) : ownProposal ? (
+          <>
+            <div className="proposal-card">
+              <p className="proposal-title">{formatMoney(ownProposal.price)}</p>
+              <p className="proposal-meta">Срок: {ownProposal.etaDays} дн.</p>
+              <p className="proposal-comment">{ownProposal.comment}</p>
+            </div>
+
+            {canManageOwnProposal ? (
+              <div className="row-actions">
+                <Button
+                  mode="bezeled"
+                  size="m"
+                  onClick={() => {
+                    setProposalError(null);
+                    setProposalEditMode((prev) => !prev);
+                    setProposalForm({
+                      price: String(ownProposal.price),
+                      comment: ownProposal.comment,
+                      etaDays: String(ownProposal.etaDays),
+                    });
+                  }}
+                >
+                  {proposalEditMode ? "Скрыть форму" : "Изменить"}
+                </Button>
+                <Button
+                  mode="plain"
+                  size="m"
+                  disabled={proposalPending}
+                  onClick={() => {
+                    void handleDeleteProposal();
+                  }}
+                >
+                  Удалить
+                </Button>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <Placeholder
+            header="Отклик не отправлен"
+            description="Оставь цену и сроки, чтобы заказчик мог выбрать тебя"
+          />
+        )}
+
+        {!isDetailOwner && canManageOwnProposal && (!ownProposal || proposalEditMode) ? (
+          <div className="form-grid proposal-form">
+            <Input
+              header="Цена"
+              type="number"
+              value={proposalForm.price}
+              onChange={(event) =>
+                setProposalForm((prev) => ({ ...prev, price: event.target.value }))
+              }
+            />
+            <Input
+              header="Срок (дней)"
+              type="number"
+              value={proposalForm.etaDays}
+              onChange={(event) =>
+                setProposalForm((prev) => ({ ...prev, etaDays: event.target.value }))
+              }
+            />
+            <Textarea
+              header="Комментарий"
+              value={proposalForm.comment}
+              onChange={(event) =>
+                setProposalForm((prev) => ({ ...prev, comment: event.target.value }))
+              }
+            />
+
+            {proposalError ? <p className="error-text">{proposalError}</p> : null}
+
+            <div className="row-actions">
+              <Button
+                mode="filled"
+                size="m"
+                disabled={proposalPending}
+                onClick={() => {
+                  if (ownProposal) {
+                    void handleUpdateProposal();
+                  } else {
+                    void handleCreateProposal();
+                  }
+                }}
+              >
+                {proposalPending
+                  ? "Сохраняем..."
+                  : ownProposal
+                    ? "Сохранить отклик"
+                    : "Отправить отклик"}
+              </Button>
+              {ownProposal ? (
+                <Button
+                  mode="outline"
+                  size="m"
+                  onClick={() => setProposalEditMode(false)}
+                >
+                  Отмена
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+      </Section>
+    );
+  };
 
   const renderDetailTask = (): JSX.Element => {
     if (detailLoading) {
@@ -1064,8 +1473,7 @@ function App() {
       );
     }
 
-    const isOwner = detailTask.customerId === authUser?.id;
-    const canEdit = isOwner && detailTask.status === "OPEN";
+    const canEdit = isDetailOwner && detailTask.status === "OPEN";
 
     return (
       <>
@@ -1094,7 +1502,7 @@ function App() {
           </List>
 
           <div className="row-actions">
-            <Button mode="outline" onClick={() => switchTab("list")}>
+            <Button mode="outline" onClick={() => navigate("/tasks") }>
               К ленте
             </Button>
             {canEdit ? (
@@ -1186,9 +1594,42 @@ function App() {
             </div>
           </Section>
         ) : null}
+
+        {renderProposalsBlock()}
       </>
     );
   };
+
+  const renderAuthGate = (): JSX.Element | null => {
+    if (authLoading) {
+      return (
+        <Section>
+          <Placeholder
+            header="Авторизация"
+            description="Подключаем профиль Telegram..."
+          />
+        </Section>
+      );
+    }
+
+    if (!isAuthenticated || !authUser) {
+      return (
+        <Section>
+          <Placeholder
+            header="Нет доступа"
+            description={
+              authError ??
+              "Открой миниапп внутри Telegram, чтобы авторизоваться и работать с задачами."
+            }
+          />
+        </Section>
+      );
+    }
+
+    return null;
+  };
+
+  const authGate = renderAuthGate();
 
   return (
     <AppRoot appearance={webAppState.appearance} platform={webAppState.uiPlatform}>
@@ -1228,24 +1669,25 @@ function App() {
             </Button>
           </div>
 
-          {view.screen === "detail" && detailTask ? (
+          {detailTaskId && detailTask ? (
             <p className="inline-hint">
               Сейчас открыт просмотр задачи «{trimText(detailTask.title, 40)}»
             </p>
           ) : null}
         </Section>
 
-        {renderAuthState()}
-
-        {isAuthenticated && authUser
-          ? view.screen === "list"
-            ? renderTasksList()
-            : view.screen === "create"
-              ? renderCreateTask()
-              : view.screen === "profile"
-                ? renderProfile()
-                : renderDetailTask()
-          : null}
+        {authGate ? (
+          authGate
+        ) : (
+          <Routes>
+            <Route path="/" element={<Navigate to="/tasks" replace />} />
+            <Route path="/tasks" element={renderTasksList()} />
+            <Route path="/tasks/new" element={renderCreateTask()} />
+            <Route path="/tasks/:taskId" element={renderDetailTask()} />
+            <Route path="/profile" element={renderProfile()} />
+            <Route path="*" element={<Navigate to="/tasks" replace />} />
+          </Routes>
+        )}
       </main>
     </AppRoot>
   );
