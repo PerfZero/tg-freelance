@@ -128,6 +128,22 @@ npm run prisma:studio
     - задача должна быть в статусе `IN_PROGRESS`
     - у задачи должен быть назначенный исполнитель
   - при успехе задача переходит в `ON_REVIEW`
+- `POST /tasks/:id/approve`
+  - header: `Authorization: Bearer <token>`
+  - только владелец задачи
+  - ограничения:
+    - задача должна быть в статусе `ON_REVIEW`
+    - у задачи должен быть назначенный исполнитель
+  - при успехе задача переходит в `COMPLETED`
+- `POST /tasks/:id/reject-review`
+  - header: `Authorization: Bearer <token>`
+  - только владелец задачи
+  - body:
+    - `comment: string` (обязательный комментарий причины отклонения)
+  - ограничения:
+    - задача должна быть в статусе `ON_REVIEW`
+    - у задачи должен быть назначенный исполнитель
+  - при успехе задача возвращается в `IN_PROGRESS`
 
 ## Status History
 
@@ -136,6 +152,8 @@ npm run prisma:studio
   - создание задачи (`null -> OPEN`)
   - выбор исполнителя (`OPEN -> IN_PROGRESS`)
   - отправка на проверку (`IN_PROGRESS -> ON_REVIEW`)
+  - подтверждение выполнения (`ON_REVIEW -> COMPLETED`)
+  - отклонение проверки (`ON_REVIEW -> IN_PROGRESS`)
   - отмена задачи (`OPEN -> CANCELED`)
 
 ## Ошибки и логирование

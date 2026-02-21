@@ -17,6 +17,7 @@ const MAX_TAG_LENGTH = 40;
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const MAX_PROPOSAL_COMMENT_LENGTH = 3000;
+const MAX_STATUS_COMMENT_LENGTH = 2000;
 
 type TaskCreatePayload = {
   title?: unknown;
@@ -44,6 +45,10 @@ type ProposalCreatePayload = {
 
 type TaskSelectProposalPayload = {
   proposal_id?: unknown;
+};
+
+type TaskRejectReviewPayload = {
+  comment?: unknown;
 };
 
 const taskSelect = {
@@ -306,6 +311,14 @@ const parseUuidValue = (value: unknown, fieldName: string): string => {
 
 const parseRequiredTaskSelectProposal = (body: TaskSelectProposalPayload) => ({
   proposalId: parseUuidValue(body.proposal_id, "proposal_id"),
+});
+
+const parseRequiredTaskRejectReview = (body: TaskRejectReviewPayload) => ({
+  comment: parseRequiredString(
+    body.comment,
+    "comment",
+    MAX_STATUS_COMMENT_LENGTH,
+  ),
 });
 
 const mapTask = (task: TaskView) => ({
@@ -917,6 +930,126 @@ tasksRouter.post("/:id/send-to-review", requireAuth, async (req, res, next) => {
         fromStatus: existingTask.status,
         toStatus: TaskStatus.ON_REVIEW,
         changedBy: authUser.id,
+      });
+    });
+
+    res.status(200).json({
+      task: mapTask(task),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+tasksRouter.post("/:id/approve", requireAuth, async (req, res, next) => {
+  try {
+    const taskId = parseTaskIdOrThrow(req.params.id);
+    const authUser = getAuthUser(res);
+
+    const task = await prisma.$transaction(async (tx) => {
+      const existingTask = await tx.task.findUnique({
+        where: { id: taskId },
+        select: {
+          id: true,
+          customerId: true,
+          status: true,
+          assignment: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      });
+
+      if (!existingTask) {
+        throw new HttpError(404, "NOT_FOUND", "Task not found");
+      }
+
+      if (existingTask.customerId !== authUser.id) {
+        throw new HttpError(
+          403,
+          "FORBIDDEN",
+          "Only task owner can approve task completion",
+        );
+      }
+
+      assertValidation(
+        existingTask.status === TaskStatus.ON_REVIEW,
+        "Only ON_REVIEW tasks can be approved",
+      );
+      assertValidation(
+        !!existingTask.assignment,
+        "Task has no assigned executor",
+      );
+
+      return updateTaskStatusWithHistory(tx, {
+        taskId,
+        fromStatus: existingTask.status,
+        toStatus: TaskStatus.COMPLETED,
+        changedBy: authUser.id,
+      });
+    });
+
+    res.status(200).json({
+      task: mapTask(task),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+tasksRouter.post("/:id/reject-review", requireAuth, async (req, res, next) => {
+  try {
+    const taskId = parseTaskIdOrThrow(req.params.id);
+    assertBodyIsObject(req.body);
+
+    const authUser = getAuthUser(res);
+    const payload = parseRequiredTaskRejectReview(
+      req.body as TaskRejectReviewPayload,
+    );
+
+    const task = await prisma.$transaction(async (tx) => {
+      const existingTask = await tx.task.findUnique({
+        where: { id: taskId },
+        select: {
+          id: true,
+          customerId: true,
+          status: true,
+          assignment: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      });
+
+      if (!existingTask) {
+        throw new HttpError(404, "NOT_FOUND", "Task not found");
+      }
+
+      if (existingTask.customerId !== authUser.id) {
+        throw new HttpError(
+          403,
+          "FORBIDDEN",
+          "Only task owner can reject review",
+        );
+      }
+
+      assertValidation(
+        existingTask.status === TaskStatus.ON_REVIEW,
+        "Only ON_REVIEW tasks can be rejected",
+      );
+      assertValidation(
+        !!existingTask.assignment,
+        "Task has no assigned executor",
+      );
+
+      return updateTaskStatusWithHistory(tx, {
+        taskId,
+        fromStatus: existingTask.status,
+        toStatus: TaskStatus.IN_PROGRESS,
+        changedBy: authUser.id,
+        comment: payload.comment,
       });
     });
 
