@@ -136,7 +136,6 @@
 }
 
 .ui-cell {
-    width: 100%;
     border: 1px solid
         var(--tg-theme-section-separator-color, rgba(0, 0, 0, 0.08));
     border-radius: 12px;

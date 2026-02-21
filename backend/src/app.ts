@@ -6,6 +6,7 @@ import { errorHandler } from "./common/error-handler";
 import { notFoundHandler } from "./common/not-found";
 import { requestContextMiddleware } from "./common/request-context";
 import { requestLoggerMiddleware } from "./common/request-logger";
+import { adminRouter } from "./modules/admin/admin.routes";
 import { authRouter } from "./modules/auth/auth.routes";
 import { healthRouter } from "./modules/health/health.routes";
 import { profileRouter } from "./modules/profile/profile.routes";
@@ -25,6 +26,7 @@ export const createApp = () => {
   app.use("/", rootRouter);
   app.use("/health", healthRouter);
   app.use("/auth", authRouter);
+  app.use("/admin", adminRouter);
   app.use("/profile", profileRouter);
   app.use("/tasks", tasksRouter);
   app.use("/proposals", proposalsRouter);

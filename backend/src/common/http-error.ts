@@ -3,6 +3,7 @@ export type ErrorCode =
   | "UNAUTHORIZED"
   | "FORBIDDEN"
   | "NOT_FOUND"
+  | "RATE_LIMITED"
   | "INTERNAL_ERROR";
 
 export class HttpError extends Error {
@@ -14,7 +15,7 @@ export class HttpError extends Error {
     status: number,
     code: ErrorCode,
     message: string,
-    details?: Record<string, unknown>
+    details?: Record<string, unknown>,
   ) {
     super(message);
     this.status = status;

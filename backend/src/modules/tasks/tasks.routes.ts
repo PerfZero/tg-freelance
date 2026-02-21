@@ -2,7 +2,9 @@ import { TaskStatus, type Prisma } from "@prisma/client";
 import { Router } from "express";
 
 import { HttpError } from "../../common/http-error";
+import { createInMemoryRateLimit } from "../../common/rate-limit";
 import { assertBodyIsObject, assertValidation } from "../../common/validation";
+import { env } from "../../config/env";
 import { prisma } from "../../config/prisma";
 import { getAuthUser, requireAuth } from "../auth/auth.middleware";
 
@@ -536,45 +538,71 @@ const updateTaskStatusWithHistory = async (
 
 export const tasksRouter = Router();
 
-tasksRouter.post("/", requireAuth, async (req, res, next) => {
-  try {
-    assertBodyIsObject(req.body);
+const taskCreateRateLimit = createInMemoryRateLimit(
+  {
+    scope: "tasks.create",
+    windowMs: env.rateLimitWindowMs,
+    maxRequests: env.taskCreateRateLimitPerWindow,
+    message: "Too many task creations. Please wait before creating a new task.",
+  },
+  (_req, res) => getAuthUser(res).id,
+);
 
-    const authUser = getAuthUser(res);
-    const payload = parseRequiredTaskCreate(req.body as TaskCreatePayload);
+const proposalCreateRateLimit = createInMemoryRateLimit(
+  {
+    scope: "proposals.create",
+    windowMs: env.rateLimitWindowMs,
+    maxRequests: env.proposalCreateRateLimitPerWindow,
+    message:
+      "Too many proposal creations. Please wait before creating a new proposal.",
+  },
+  (_req, res) => getAuthUser(res).id,
+);
 
-    const task = await prisma.$transaction(async (tx) => {
-      const createdTask = await tx.task.create({
-        data: {
-          customerId: authUser.id,
-          title: payload.title,
-          description: payload.description,
-          budget: payload.budget,
-          deadlineAt: payload.deadline,
-          category: payload.category,
-          tags: payload.tags,
-          status: TaskStatus.OPEN,
-        },
-        select: taskSelect,
+tasksRouter.post(
+  "/",
+  requireAuth,
+  taskCreateRateLimit,
+  async (req, res, next) => {
+    try {
+      assertBodyIsObject(req.body);
+
+      const authUser = getAuthUser(res);
+      const payload = parseRequiredTaskCreate(req.body as TaskCreatePayload);
+
+      const task = await prisma.$transaction(async (tx) => {
+        const createdTask = await tx.task.create({
+          data: {
+            customerId: authUser.id,
+            title: payload.title,
+            description: payload.description,
+            budget: payload.budget,
+            deadlineAt: payload.deadline,
+            category: payload.category,
+            tags: payload.tags,
+            status: TaskStatus.OPEN,
+          },
+          select: taskSelect,
+        });
+
+        await createTaskStatusHistory(tx, {
+          taskId: createdTask.id,
+          fromStatus: null,
+          toStatus: TaskStatus.OPEN,
+          changedBy: authUser.id,
+        });
+
+        return createdTask;
       });
 
-      await createTaskStatusHistory(tx, {
-        taskId: createdTask.id,
-        fromStatus: null,
-        toStatus: TaskStatus.OPEN,
-        changedBy: authUser.id,
+      res.status(201).json({
+        task: mapTask(task),
       });
-
-      return createdTask;
-    });
-
-    res.status(201).json({
-      task: mapTask(task),
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 tasksRouter.get("/", requireAuth, async (req, res, next) => {
   try {
@@ -667,99 +695,104 @@ tasksRouter.get("/", requireAuth, async (req, res, next) => {
   }
 });
 
-tasksRouter.post("/:id/proposals", requireAuth, async (req, res, next) => {
-  try {
-    const taskId = parseTaskIdOrThrow(req.params.id);
-    assertBodyIsObject(req.body);
+tasksRouter.post(
+  "/:id/proposals",
+  requireAuth,
+  proposalCreateRateLimit,
+  async (req, res, next) => {
+    try {
+      const taskId = parseTaskIdOrThrow(req.params.id);
+      assertBodyIsObject(req.body);
 
-    const authUser = getAuthUser(res);
-    const payload = parseRequiredProposalCreate(
-      req.body as ProposalCreatePayload,
-    );
+      const authUser = getAuthUser(res);
+      const payload = parseRequiredProposalCreate(
+        req.body as ProposalCreatePayload,
+      );
 
-    const task = await prisma.task.findUnique({
-      where: { id: taskId },
-      select: {
-        id: true,
-        customerId: true,
-        status: true,
-        assignment: {
-          select: {
-            id: true,
+      const task = await prisma.task.findUnique({
+        where: { id: taskId },
+        select: {
+          id: true,
+          customerId: true,
+          status: true,
+          assignment: {
+            select: {
+              id: true,
+            },
           },
         },
-      },
-    });
-
-    if (!task) {
-      throw new HttpError(404, "NOT_FOUND", "Task not found");
-    }
-
-    assertValidation(
-      task.status === TaskStatus.OPEN,
-      "Task is not open for proposals",
-    );
-    assertValidation(
-      task.customerId !== authUser.id,
-      "You cannot create a proposal for your own task",
-    );
-    assertValidation(
-      !task.assignment,
-      "Executor has already been selected for this task",
-    );
-
-    const existingProposal = await prisma.proposal.findUnique({
-      where: {
-        taskId_executorId: {
-          taskId,
-          executorId: authUser.id,
-        },
-      },
-      select: { id: true },
-    });
-
-    assertValidation(
-      !existingProposal,
-      "Only one proposal per executor is allowed for a task",
-    );
-
-    let proposal: ProposalView;
-
-    try {
-      proposal = await prisma.proposal.create({
-        data: {
-          taskId,
-          executorId: authUser.id,
-          price: payload.price,
-          comment: payload.comment,
-          etaDays: payload.etaDays,
-        },
-        select: proposalSelect,
       });
-    } catch (error) {
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        (error as { code?: unknown }).code === "P2002"
-      ) {
-        throw new HttpError(
-          400,
-          "VALIDATION_ERROR",
-          "Only one proposal per executor is allowed for a task",
-        );
+
+      if (!task) {
+        throw new HttpError(404, "NOT_FOUND", "Task not found");
       }
 
-      throw error;
-    }
+      assertValidation(
+        task.status === TaskStatus.OPEN,
+        "Task is not open for proposals",
+      );
+      assertValidation(
+        task.customerId !== authUser.id,
+        "You cannot create a proposal for your own task",
+      );
+      assertValidation(
+        !task.assignment,
+        "Executor has already been selected for this task",
+      );
 
-    res.status(201).json({
-      proposal: mapProposal(proposal),
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+      const existingProposal = await prisma.proposal.findUnique({
+        where: {
+          taskId_executorId: {
+            taskId,
+            executorId: authUser.id,
+          },
+        },
+        select: { id: true },
+      });
+
+      assertValidation(
+        !existingProposal,
+        "Only one proposal per executor is allowed for a task",
+      );
+
+      let proposal: ProposalView;
+
+      try {
+        proposal = await prisma.proposal.create({
+          data: {
+            taskId,
+            executorId: authUser.id,
+            price: payload.price,
+            comment: payload.comment,
+            etaDays: payload.etaDays,
+          },
+          select: proposalSelect,
+        });
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          (error as { code?: unknown }).code === "P2002"
+        ) {
+          throw new HttpError(
+            400,
+            "VALIDATION_ERROR",
+            "Only one proposal per executor is allowed for a task",
+          );
+        }
+
+        throw error;
+      }
+
+      res.status(201).json({
+        proposal: mapProposal(proposal),
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 tasksRouter.get("/:id/proposals", requireAuth, async (req, res, next) => {
   try {

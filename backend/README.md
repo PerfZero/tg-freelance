@@ -14,6 +14,13 @@ npm run dev
 
 API поднимается на `http://localhost:3001` (или порт из `PORT`).
 
+Дополнительные env для прод-ограничений:
+
+- `RATE_LIMIT_WINDOW_MS` (по умолчанию `600000`)
+- `TASK_CREATE_RATE_LIMIT_PER_WINDOW` (по умолчанию `5`)
+- `PROPOSAL_CREATE_RATE_LIMIT_PER_WINDOW` (по умолчанию `20`)
+- `ADMIN_TELEGRAM_IDS` (через запятую, например `123,456`)
+
 ## Команды
 
 ```bash
@@ -62,6 +69,7 @@ npm run prisma:studio
     - `category: string`
     - `deadline_at?: string | null` (ISO datetime)
     - `tags?: string[]`
+  - rate limit: `TASK_CREATE_RATE_LIMIT_PER_WINDOW` на окно `RATE_LIMIT_WINDOW_MS`
 - `GET /tasks`
   - header: `Authorization: Bearer <token>`
   - query (optional):
@@ -97,6 +105,7 @@ npm run prisma:studio
     - на задачу можно оставить только один отклик от исполнителя
     - отклики доступны только для задач в статусе `OPEN`
     - после выбора исполнителя новые отклики запрещены
+  - rate limit: `PROPOSAL_CREATE_RATE_LIMIT_PER_WINDOW` на окно `RATE_LIMIT_WINDOW_MS`
 - `GET /tasks/:id/proposals`
   - header: `Authorization: Bearer <token>`
   - права:
@@ -150,6 +159,20 @@ npm run prisma:studio
     - задача должна быть в статусе `ON_REVIEW`
     - у задачи должен быть назначенный исполнитель
   - при успехе задача возвращается в `IN_PROGRESS`
+
+## Admin API
+
+- `PATCH /admin/users/:userId/block`
+  - header: `Authorization: Bearer <token>`
+  - доступ: только admin-пользователь
+    - `roleFlags.admin = true` или `telegram_id` есть в `ADMIN_TELEGRAM_IDS`
+  - body:
+    - `is_blocked: boolean`
+    - `reason?: string` (до 500 символов, для аудита в логах)
+  - ограничения:
+    - нельзя блокировать/разблокировать самого себя
+  - результат:
+    - обновленный пользователь
 
 ## Status History
 

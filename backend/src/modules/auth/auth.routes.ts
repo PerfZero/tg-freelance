@@ -12,6 +12,7 @@ import type { UserWithProfile } from "./auth.types";
 const defaultRoleFlags = {
   customer: true,
   executor: true,
+  admin: false,
 };
 
 const toDisplayName = (
