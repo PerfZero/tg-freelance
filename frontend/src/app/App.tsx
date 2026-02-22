@@ -97,6 +97,23 @@ type PaginationMeta = {
   totalPages: number;
 };
 
+const parseTotalUsers = (input: unknown): number | null => {
+  if (typeof input !== "object" || input === null) {
+    return null;
+  }
+
+  const value = (input as { totalUsers?: unknown }).totalUsers;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
+  if (value < 0) {
+    return null;
+  }
+
+  return Math.floor(value);
+};
+
 function App() {
   const webAppState = useMemo(() => getSafeState(), []);
   const profileAcronym = useMemo(
@@ -358,13 +375,25 @@ function App() {
     [],
   );
 
-  const requestPlatformStats = useCallback(
-    (authToken: string) =>
-      apiRequest<{
-        totalUsers: number;
-      }>("/profile/platform-stats", {}, authToken),
-    [],
-  );
+  const requestPlatformStats = useCallback(async (authToken: string) => {
+    const secureResponse = await apiRequest<unknown>(
+      "/profile/platform-stats",
+      {},
+      authToken,
+    );
+    const secureValue = parseTotalUsers(secureResponse);
+    if (secureValue !== null) {
+      return secureValue;
+    }
+
+    const fallbackResponse = await apiRequest<unknown>("/stats");
+    const fallbackValue = parseTotalUsers(fallbackResponse);
+    if (fallbackValue !== null) {
+      return fallbackValue;
+    }
+
+    throw new Error("Не удалось получить количество пользователей");
+  }, []);
 
   const requestAdminUsers = useCallback((authToken: string, query: string) => {
     const params = new URLSearchParams({
@@ -971,7 +1000,7 @@ function App() {
           return;
         }
 
-        setTotalUsersCount(response.totalUsers);
+        setTotalUsersCount(response);
       } catch {
         if (!active) {
           return;
