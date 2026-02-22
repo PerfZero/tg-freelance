@@ -359,10 +359,10 @@ function App() {
   );
 
   const requestPlatformStats = useCallback(
-    () =>
+    (authToken: string) =>
       apiRequest<{
         totalUsers: number;
-      }>("/stats"),
+      }>("/profile/platform-stats", {}, authToken),
     [],
   );
 
@@ -966,7 +966,7 @@ function App() {
 
     const loadStats = async (): Promise<void> => {
       try {
-        const response = await requestPlatformStats();
+        const response = await requestPlatformStats(token);
         if (!active) {
           return;
         }

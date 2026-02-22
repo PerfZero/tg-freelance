@@ -471,6 +471,18 @@ profileRouter.patch("/me", requireAuth, async (req, res, next) => {
   }
 });
 
+profileRouter.get("/platform-stats", requireAuth, async (_req, res, next) => {
+  try {
+    const totalUsers = await prisma.user.count();
+
+    res.status(200).json({
+      totalUsers,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 profileRouter.get("/:userId", requireAuth, async (req, res, next) => {
   try {
     const userIdRaw = req.params.userId;
