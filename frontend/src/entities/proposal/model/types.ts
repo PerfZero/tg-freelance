@@ -31,3 +31,26 @@ export type ProposalItem = {
     } | null;
   } | null;
 };
+
+export type MyProposalItem = {
+  id: string;
+  taskId: string;
+  executorId: string;
+  price: number;
+  comment: string;
+  etaDays: number;
+  createdAt: string;
+  updatedAt: string;
+  task: {
+    id: string;
+    title: string;
+    status: "OPEN" | "IN_PROGRESS" | "ON_REVIEW" | "COMPLETED" | "CANCELED";
+    deadlineAt: string | null;
+    category: string;
+    customer: {
+      id: string;
+      username: string | null;
+      displayName: string;
+    } | null;
+  };
+};

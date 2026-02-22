@@ -10,6 +10,8 @@ const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const MAX_PROPOSAL_COMMENT_LENGTH = 3000;
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
 
 type ProposalPatchPayload = {
   price?: unknown;
@@ -35,7 +37,40 @@ const proposalSelect = {
   },
 } satisfies Prisma.ProposalSelect;
 
-type ProposalView = Prisma.ProposalGetPayload<{ select: typeof proposalSelect }>;
+type ProposalView = Prisma.ProposalGetPayload<{
+  select: typeof proposalSelect;
+}>;
+
+const myProposalSelect = {
+  id: true,
+  taskId: true,
+  executorId: true,
+  price: true,
+  comment: true,
+  etaDays: true,
+  createdAt: true,
+  updatedAt: true,
+  task: {
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      deadlineAt: true,
+      category: true,
+      customer: {
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.ProposalSelect;
+
+type MyProposalView = Prisma.ProposalGetPayload<{
+  select: typeof myProposalSelect;
+}>;
 
 const parseProposalIdOrThrow = (id: unknown): string => {
   assertValidation(typeof id === "string", "id must be a valid UUID");
@@ -44,6 +79,56 @@ const parseProposalIdOrThrow = (id: unknown): string => {
   assertValidation(UUID_PATTERN.test(proposalId), "id must be a valid UUID");
 
   return proposalId;
+};
+
+const getQueryString = (value: unknown): string | undefined => {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    typeof value[0] === "string"
+  ) {
+    return value[0];
+  }
+
+  return undefined;
+};
+
+const parsePositiveInt = (
+  value: unknown,
+  fieldName: string,
+  fallback: number,
+): number => {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  const raw = Array.isArray(value) ? value[0] : value;
+  const parsed = Number.parseInt(String(raw), 10);
+  assertValidation(
+    Number.isInteger(parsed) && parsed > 0,
+    `${fieldName} must be a positive integer`,
+  );
+
+  return parsed;
+};
+
+const parseOptionalTaskStatus = (value: unknown): TaskStatus | undefined => {
+  const raw = getQueryString(value);
+  if (!raw) {
+    return undefined;
+  }
+
+  const status = raw as TaskStatus;
+  assertValidation(
+    Object.values(TaskStatus).includes(status),
+    "status must be a valid task status",
+  );
+
+  return status;
 };
 
 const normalizeString = (value: string): string => value.trim();
@@ -143,6 +228,33 @@ const mapProposal = (proposal: ProposalView) => ({
     : null,
 });
 
+const mapMyProposal = (proposal: MyProposalView) => ({
+  id: proposal.id,
+  taskId: proposal.taskId,
+  executorId: proposal.executorId,
+  price: Number(proposal.price.toString()),
+  comment: proposal.comment,
+  etaDays: proposal.etaDays,
+  createdAt: proposal.createdAt.toISOString(),
+  updatedAt: proposal.updatedAt.toISOString(),
+  task: {
+    id: proposal.task.id,
+    title: proposal.task.title,
+    status: proposal.task.status,
+    deadlineAt: proposal.task.deadlineAt
+      ? proposal.task.deadlineAt.toISOString()
+      : null,
+    category: proposal.task.category,
+    customer: proposal.task.customer
+      ? {
+          id: proposal.task.customer.id,
+          username: proposal.task.customer.username,
+          displayName: proposal.task.customer.displayName,
+        }
+      : null,
+  },
+});
+
 const getProposalContextOrThrow = async (proposalId: string) => {
   const proposal = await prisma.proposal.findUnique({
     where: { id: proposalId },
@@ -191,6 +303,51 @@ const assertProposalCanBeChanged = (
 };
 
 export const proposalsRouter = Router();
+
+proposalsRouter.get("/my", requireAuth, async (req, res, next) => {
+  try {
+    const authUser = getAuthUser(res);
+    const page = parsePositiveInt(req.query.page, "page", 1);
+    const limit = parsePositiveInt(req.query.limit, "limit", DEFAULT_LIMIT);
+    assertValidation(limit <= MAX_LIMIT, `limit must be at most ${MAX_LIMIT}`);
+    const status = parseOptionalTaskStatus(req.query.status);
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.ProposalWhereInput = {
+      executorId: authUser.id,
+      ...(status
+        ? {
+            task: {
+              status,
+            },
+          }
+        : {}),
+    };
+
+    const [total, items] = await Promise.all([
+      prisma.proposal.count({ where }),
+      prisma.proposal.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+        select: myProposalSelect,
+      }),
+    ]);
+
+    res.status(200).json({
+      items: items.map(mapMyProposal),
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 proposalsRouter.patch("/:id", requireAuth, async (req, res, next) => {
   try {

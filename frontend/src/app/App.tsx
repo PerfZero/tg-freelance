@@ -29,6 +29,7 @@ import type { NotificationItem } from "../entities/notification/model/types";
 import type {
   ProposalForm,
   ProposalItem,
+  MyProposalItem,
 } from "../entities/proposal/model/types";
 import type {
   TaskFilters,
@@ -75,6 +76,7 @@ import {
   AccountBotNotificationsScreen,
   AccountExecutorScreen,
   AccountHomeScreen,
+  AccountMyProposalsScreen,
   AccountNotificationsScreen,
   AccountRoleScreen,
 } from "../pages/account/ui/AccountScreens";
@@ -237,6 +239,9 @@ function App() {
   const [proposalPending, setProposalPending] = useState(false);
   const [proposalError, setProposalError] = useState<string | null>(null);
   const [proposalEditMode, setProposalEditMode] = useState(false);
+  const [myProposals, setMyProposals] = useState<MyProposalItem[]>([]);
+  const [myProposalsLoading, setMyProposalsLoading] = useState(false);
+  const [myProposalsError, setMyProposalsError] = useState<string | null>(null);
 
   const [selectPendingId, setSelectPendingId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -274,6 +279,7 @@ function App() {
   >("ALL");
   const [adminLogsLoading, setAdminLogsLoading] = useState(false);
   const [adminLogsError, setAdminLogsError] = useState<string | null>(null);
+  const [totalUsersCount, setTotalUsersCount] = useState<number | null>(null);
 
   const isAuthenticated = Boolean(token);
   const isTelegramMiniApp = webAppState.isTelegram;
@@ -340,6 +346,23 @@ function App() {
         {},
         authToken,
       ),
+    [],
+  );
+
+  const requestMyProposals = useCallback(
+    (authToken: string) =>
+      apiRequest<{
+        items: MyProposalItem[];
+        pagination: PaginationMeta;
+      }>("/proposals/my?page=1&limit=50", {}, authToken),
+    [],
+  );
+
+  const requestPlatformStats = useCallback(
+    () =>
+      apiRequest<{
+        totalUsers: number;
+      }>("/stats"),
     [],
   );
 
@@ -705,6 +728,30 @@ function App() {
     [isAdmin, requestAdminLogs, token],
   );
 
+  const loadMyProposals = useCallback(async (): Promise<void> => {
+    if (!token) {
+      setMyProposals([]);
+      setMyProposalsError(null);
+      setMyProposalsLoading(false);
+      return;
+    }
+
+    try {
+      setMyProposalsLoading(true);
+      setMyProposalsError(null);
+
+      const response = await requestMyProposals(token);
+      setMyProposals(response.items);
+    } catch (error) {
+      setMyProposals([]);
+      setMyProposalsError(
+        error instanceof Error ? error.message : "Не удалось загрузить отклики",
+      );
+    } finally {
+      setMyProposalsLoading(false);
+    }
+  }, [requestMyProposals, token]);
+
   useEffect(() => {
     if (authLoading || !isAuthenticated || !authUser) {
       return;
@@ -908,6 +955,46 @@ function App() {
     loadAdminUsers,
     token,
   ]);
+
+  useEffect(() => {
+    if (!token) {
+      setTotalUsersCount(null);
+      return;
+    }
+
+    let active = true;
+
+    const loadStats = async (): Promise<void> => {
+      try {
+        const response = await requestPlatformStats();
+        if (!active) {
+          return;
+        }
+
+        setTotalUsersCount(response.totalUsers);
+      } catch {
+        if (!active) {
+          return;
+        }
+
+        setTotalUsersCount(null);
+      }
+    };
+
+    void loadStats();
+
+    return () => {
+      active = false;
+    };
+  }, [requestPlatformStats, token]);
+
+  useEffect(() => {
+    if (!location.pathname.startsWith("/account/proposals")) {
+      return;
+    }
+
+    void loadMyProposals();
+  }, [loadMyProposals, location.pathname]);
 
   useEffect(() => {
     if (!token) {
@@ -2186,6 +2273,7 @@ function App() {
         onOpenExecutor={() => navigate("/account/executor")}
         onOpenBotNotifications={() => navigate("/account/bot-notifications")}
         onOpenNotificationsCenter={() => navigate("/account/notifications")}
+        onOpenMyProposals={() => navigate("/account/proposals")}
         isAdmin={isAdmin}
         onOpenAdmin={() => {
           if (isTelegramMiniApp) {
@@ -2286,6 +2374,21 @@ function App() {
       }}
       onReadOne={(notificationId) => {
         void handleReadNotification(notificationId);
+      }}
+      onBack={() => navigate("/account")}
+    />
+  );
+
+  const renderAccountMyProposals = (): JSX.Element => (
+    <AccountMyProposalsScreen
+      proposals={myProposals}
+      proposalsLoading={myProposalsLoading}
+      proposalsError={myProposalsError}
+      onRefresh={() => {
+        void loadMyProposals();
+      }}
+      onOpenTask={(taskId) => {
+        navigate(`/task/${taskId}`);
       }}
       onBack={() => navigate("/account")}
     />
@@ -2408,6 +2511,7 @@ function App() {
       }}
       onPrevPage={() => setPage((prev) => prev - 1)}
       onNextPage={() => setPage((prev) => prev + 1)}
+      totalUsersCount={totalUsersCount}
     />
   );
 
@@ -2609,6 +2713,10 @@ function App() {
               <Route
                 path="/account/notifications"
                 element={renderAccountNotifications()}
+              />
+              <Route
+                path="/account/proposals"
+                element={renderAccountMyProposals()}
               />
               <Route
                 path="*"

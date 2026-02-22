@@ -648,6 +648,7 @@ const updateTaskStatusWithHistory = async (
 
 type TaskChatContext = {
   id: string;
+  title: string;
   customerId: string;
   assignment: {
     executorId: string;
@@ -661,6 +662,7 @@ const getTaskChatContextOrThrow = async (
     where: { id: taskId },
     select: {
       id: true,
+      title: true,
       customerId: true,
       assignment: {
         select: {
@@ -699,6 +701,16 @@ const assertTaskChatParticipantOrThrow = (
       "Only task customer and assigned executor can access chat",
     );
   }
+};
+
+const formatMessagePreview = (text: string): string => {
+  const normalized = normalizeString(text);
+
+  if (normalized.length <= 120) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, 117)}...`;
 };
 
 export const tasksRouter = Router();
@@ -1093,6 +1105,49 @@ tasksRouter.post("/:id/messages", requireAuth, async (req, res, next) => {
       },
       select: taskMessageSelect,
     });
+
+    const receiverUserId =
+      taskContext.customerId === authUser.id
+        ? (taskContext.assignment?.executorId ?? null)
+        : taskContext.customerId;
+
+    if (receiverUserId) {
+      const notificationTitle = "Новое сообщение в чате";
+      const notificationBody = `По задаче "${taskContext.title}" пришло новое сообщение: ${formatMessagePreview(payload.text)}`;
+
+      try {
+        await createNotification(prisma, {
+          userId: receiverUserId,
+          type: NotificationType.TASK_MESSAGE_RECEIVED,
+          title: notificationTitle,
+          body: notificationBody,
+          payload: {
+            taskId,
+            messageId: message.id,
+            senderId: authUser.id,
+          },
+        });
+      } catch (notificationError) {
+        logger.warn("notifications.create_failed", {
+          event: "TASK_MESSAGE_RECEIVED",
+          taskId,
+          messageId: message.id,
+          targetUserId: receiverUserId,
+          error:
+            notificationError instanceof Error
+              ? notificationError.message
+              : "Unknown notification error",
+        });
+      }
+
+      void sendTaskBotNotification({
+        userId: receiverUserId,
+        type: NotificationType.TASK_MESSAGE_RECEIVED,
+        title: notificationTitle,
+        body: notificationBody,
+        taskId,
+      });
+    }
 
     res.status(201).json({
       message: mapTaskMessage(message),

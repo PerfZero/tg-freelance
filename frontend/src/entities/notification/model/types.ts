@@ -3,7 +3,8 @@ export type NotificationTypeValue =
   | "EXECUTOR_SELECTED"
   | "TASK_SENT_TO_REVIEW"
   | "TASK_APPROVED"
-  | "TASK_REJECTED";
+  | "TASK_REJECTED"
+  | "TASK_MESSAGE_RECEIVED";
 
 export type NotificationItem = {
   id: string;

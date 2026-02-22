@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "public"."NotificationType" ADD VALUE IF NOT EXISTS 'TASK_MESSAGE_RECEIVED';

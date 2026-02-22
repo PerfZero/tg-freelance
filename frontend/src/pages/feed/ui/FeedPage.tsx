@@ -1,4 +1,11 @@
-import { Check, ChevronLeft, ChevronRight, CirclePlus, Filter, RotateCcw } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  CirclePlus,
+  Filter,
+  RotateCcw,
+} from "lucide-react";
 
 import type { TaskFilters, TaskItem } from "../../../entities/task/model/types";
 import {
@@ -7,7 +14,10 @@ import {
   STATUS_OPTIONS,
 } from "../../../shared/config/constants";
 import { formatDate, formatMoney, trimText } from "../../../shared/lib/format";
-import { getStatusLabel, shouldClampTaskDescription } from "../../../shared/lib/task";
+import {
+  getStatusLabel,
+  shouldClampTaskDescription,
+} from "../../../shared/lib/task";
 import { Button, Input, Placeholder, Section } from "../../../shared/ui";
 
 type FeedPageProps = {
@@ -34,6 +44,7 @@ type FeedPageProps = {
   };
   onPrevPage: () => void;
   onNextPage: () => void;
+  totalUsersCount: number | null;
 };
 
 export const FeedPage = ({
@@ -56,6 +67,7 @@ export const FeedPage = ({
   pagination,
   onPrevPage,
   onNextPage,
+  totalUsersCount,
 }: FeedPageProps): JSX.Element => {
   const activeFiltersCount = [
     filterApplied.q.trim(),
@@ -77,7 +89,11 @@ export const FeedPage = ({
         footer="Фильтры свернуты по умолчанию, чтобы сначала видеть список задач."
       >
         <div className="feed-toolbar">
-          <Button size="m" mode={filtersOpen ? "filled" : "outline"} onClick={onToggleFilters}>
+          <Button
+            size="m"
+            mode={filtersOpen ? "filled" : "outline"}
+            onClick={onToggleFilters}
+          >
             <span className="btn-with-icon">
               <Filter size={16} />
               <span>{filtersOpen ? "Скрыть фильтры" : "Показать фильтры"}</span>
@@ -90,7 +106,9 @@ export const FeedPage = ({
           >
             <span className="btn-with-icon">
               <CirclePlus size={16} />
-              <span>{isCustomerPriority ? "Создать задачу" : "Разместить задачу"}</span>
+              <span>
+                {isCustomerPriority ? "Создать задачу" : "Разместить задачу"}
+              </span>
             </span>
           </Button>
         </div>
@@ -104,25 +122,33 @@ export const FeedPage = ({
                 header="Поиск"
                 placeholder="Например: лендинг"
                 value={filterDraft.q}
-                onChange={(event) => onPatchFilterDraft({ q: event.target.value })}
+                onChange={(event) =>
+                  onPatchFilterDraft({ q: event.target.value })
+                }
               />
               <Input
                 header="Категория"
                 placeholder="frontend"
                 value={filterDraft.category}
-                onChange={(event) => onPatchFilterDraft({ category: event.target.value })}
+                onChange={(event) =>
+                  onPatchFilterDraft({ category: event.target.value })
+                }
               />
               <Input
                 header="Бюджет от"
                 type="number"
                 value={filterDraft.budgetMin}
-                onChange={(event) => onPatchFilterDraft({ budgetMin: event.target.value })}
+                onChange={(event) =>
+                  onPatchFilterDraft({ budgetMin: event.target.value })
+                }
               />
               <Input
                 header="Бюджет до"
                 type="number"
                 value={filterDraft.budgetMax}
-                onChange={(event) => onPatchFilterDraft({ budgetMax: event.target.value })}
+                onChange={(event) =>
+                  onPatchFilterDraft({ budgetMax: event.target.value })
+                }
               />
             </div>
 
@@ -133,9 +159,13 @@ export const FeedPage = ({
                   key={statusOption.value}
                   size="s"
                   mode={
-                    filterDraft.status === statusOption.value ? "filled" : "outline"
+                    filterDraft.status === statusOption.value
+                      ? "filled"
+                      : "outline"
                   }
-                  onClick={() => onPatchFilterDraft({ status: statusOption.value })}
+                  onClick={() =>
+                    onPatchFilterDraft({ status: statusOption.value })
+                  }
                 >
                   {statusOption.label}
                 </Button>
@@ -181,7 +211,10 @@ export const FeedPage = ({
         footer={`Страница ${pagination.page}/${Math.max(pagination.totalPages, 1)}`}
       >
         {listLoading ? (
-          <Placeholder header="Загрузка" description="Получаем список задач..." />
+          <Placeholder
+            header="Загрузка"
+            description="Получаем список задач..."
+          />
         ) : listError ? (
           <Placeholder header="Ошибка" description={listError} />
         ) : tasks.length === 0 ? (
@@ -196,25 +229,37 @@ export const FeedPage = ({
               const canClamp = shouldClampTaskDescription(task.description);
               const previewDescription =
                 canClamp && !isExpanded
-                  ? trimText(task.description, MAX_TASK_DESCRIPTION_PREVIEW_CHARS)
+                  ? trimText(
+                      task.description,
+                      MAX_TASK_DESCRIPTION_PREVIEW_CHARS,
+                    )
                   : task.description;
 
               return (
                 <article key={task.id} className="task-feed-card">
                   <div className="task-feed-card-head">
                     <h3 className="task-feed-card-title">{task.title}</h3>
-                    <p className="task-feed-card-budget">{formatMoney(task.budget)}</p>
+                    <p className="task-feed-card-budget">
+                      {formatMoney(task.budget)}
+                    </p>
                   </div>
 
                   <div className="task-feed-meta-row">
-                    <span className="task-feed-meta-chip">{getStatusLabel(task.status)}</span>
-                    <span className="task-feed-meta-chip">{formatDate(task.deadlineAt)}</span>
+                    <span className="task-feed-meta-chip">
+                      {getStatusLabel(task.status)}
+                    </span>
+                    <span className="task-feed-meta-chip">
+                      {formatDate(task.deadlineAt)}
+                    </span>
                   </div>
 
                   <div className="task-feed-meta-row">
                     <span className="task-feed-meta-chip">{task.category}</span>
                     {task.tags.slice(0, 3).map((tag) => (
-                      <span key={`${task.id}-${tag}`} className="task-feed-meta-chip">
+                      <span
+                        key={`${task.id}-${tag}`}
+                        className="task-feed-meta-chip"
+                      >
                         #{tag}
                       </span>
                     ))}
@@ -224,14 +269,22 @@ export const FeedPage = ({
 
                   {canClamp ? (
                     <div className="task-feed-readmore-row">
-                      <Button mode="outline" size="s" onClick={() => onToggleDescription(task.id)}>
+                      <Button
+                        mode="outline"
+                        size="s"
+                        onClick={() => onToggleDescription(task.id)}
+                      >
                         {isExpanded ? "Скрыть" : "Показать еще"}
                       </Button>
                     </div>
                   ) : null}
 
                   <div className="task-feed-actions">
-                    <Button mode="bezeled" size="m" onClick={() => onOpenTask(task.id)}>
+                    <Button
+                      mode="bezeled"
+                      size="m"
+                      onClick={() => onOpenTask(task.id)}
+                    >
                       Открыть задачу
                     </Button>
                   </div>
@@ -242,7 +295,12 @@ export const FeedPage = ({
         )}
 
         <div className="row-actions row-actions-tight">
-          <Button mode="outline" size="m" disabled={page <= 1 || listLoading} onClick={onPrevPage}>
+          <Button
+            mode="outline"
+            size="m"
+            disabled={page <= 1 || listLoading}
+            onClick={onPrevPage}
+          >
             <span className="btn-with-icon">
               <ChevronLeft size={16} />
               <span>Назад</span>
@@ -251,7 +309,11 @@ export const FeedPage = ({
           <Button
             mode="outline"
             size="m"
-            disabled={listLoading || page >= pagination.totalPages || pagination.totalPages === 0}
+            disabled={
+              listLoading ||
+              page >= pagination.totalPages ||
+              pagination.totalPages === 0
+            }
             onClick={onNextPage}
           >
             <span className="btn-with-icon">
@@ -260,6 +322,11 @@ export const FeedPage = ({
             </span>
           </Button>
         </div>
+
+        <p className="feed-platform-stat">
+          Пользователей на площадке:{" "}
+          {typeof totalUsersCount === "number" ? totalUsersCount : "—"}
+        </p>
       </Section>
     </>
   );

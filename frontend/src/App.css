@@ -339,6 +339,13 @@
     font-size: 13px;
 }
 
+.feed-platform-stat {
+    margin: 12px 0 0;
+    color: var(--app-hint);
+    font-size: 12px;
+    text-align: center;
+}
+
 .task-feed-list {
     display: grid;
     gap: 8px;

@@ -4,11 +4,13 @@ import {
   Briefcase,
   Camera,
   ChevronRight,
+  Send,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
 
 import type { NotificationItem } from "../../../entities/notification/model/types";
+import type { MyProposalItem } from "../../../entities/proposal/model/types";
 import type {
   ExecutorProfileForm,
   ExperienceLevelValue,
@@ -16,8 +18,9 @@ import type {
   PublicUser,
 } from "../../../entities/user/model/types";
 import { EXPERIENCE_LEVEL_OPTIONS } from "../../../shared/config/constants";
-import { formatDate } from "../../../shared/lib/format";
+import { formatDate, formatMoney, trimText } from "../../../shared/lib/format";
 import { toRoleLabel } from "../../../shared/lib/profile";
+import { getStatusLabel } from "../../../shared/lib/task";
 import {
   Avatar,
   Button,
@@ -68,6 +71,7 @@ type AccountHomeScreenProps = {
   onOpenExecutor: () => void;
   onOpenBotNotifications: () => void;
   onOpenNotificationsCenter: () => void;
+  onOpenMyProposals: () => void;
   isAdmin: boolean;
   onOpenAdmin: () => void;
 };
@@ -84,6 +88,7 @@ export const AccountHomeScreen = ({
   onOpenExecutor,
   onOpenBotNotifications,
   onOpenNotificationsCenter,
+  onOpenMyProposals,
   isAdmin,
   onOpenAdmin,
 }: AccountHomeScreenProps): JSX.Element => {
@@ -174,6 +179,14 @@ export const AccountHomeScreen = ({
             onClick={onOpenNotificationsCenter}
           >
             Центр уведомлений
+          </Cell>
+          <Cell
+            before={<Send size={18} />}
+            subtitle="Список задач, где ты уже откликнулся"
+            after={accountMenuAfter("Открыть")}
+            onClick={onOpenMyProposals}
+          >
+            Мои отклики
           </Cell>
           {isAdmin ? (
             <Cell
@@ -318,6 +331,78 @@ export const AccountRoleScreen = ({
       </div>
 
       {roleSaveError ? <p className="error-text">{roleSaveError}</p> : null}
+    </Section>
+
+    <AccountBack onBack={onBack} />
+  </>
+);
+
+type AccountMyProposalsScreenProps = {
+  proposals: MyProposalItem[];
+  proposalsLoading: boolean;
+  proposalsError: string | null;
+  onOpenTask: (taskId: string) => void;
+  onRefresh: () => void;
+  onBack: () => void;
+};
+
+export const AccountMyProposalsScreen = ({
+  proposals,
+  proposalsLoading,
+  proposalsError,
+  onOpenTask,
+  onRefresh,
+  onBack,
+}: AccountMyProposalsScreenProps): JSX.Element => (
+  <>
+    <Section
+      header={`Мои отклики (${proposals.length})`}
+      footer="Здесь все задачи, по которым ты отправлял отклик."
+    >
+      <div className="row-actions row-actions-tight">
+        <Button mode="outline" size="s" onClick={onRefresh}>
+          Обновить
+        </Button>
+      </div>
+
+      {proposalsLoading ? (
+        <Placeholder header="Загрузка" description="Получаем твои отклики..." />
+      ) : proposalsError ? (
+        <Placeholder header="Ошибка" description={proposalsError} />
+      ) : proposals.length === 0 ? (
+        <Placeholder
+          header="Пока пусто"
+          description="Ты еще не откликался на задачи."
+        />
+      ) : (
+        <div className="proposal-list">
+          {proposals.map((proposal) => (
+            <div key={proposal.id} className="proposal-card">
+              <p className="proposal-title">{proposal.task.title}</p>
+              <p className="proposal-meta">
+                {getStatusLabel(proposal.task.status)} •{" "}
+                {formatDate(proposal.createdAt)}
+              </p>
+              <p className="proposal-mini-meta">
+                {proposal.task.category} • бюджет отклика{" "}
+                {formatMoney(proposal.price)}
+              </p>
+              <p className="proposal-comment">
+                {trimText(proposal.comment, 150)}
+              </p>
+              <div className="proposal-actions">
+                <Button
+                  mode="bezeled"
+                  size="s"
+                  onClick={() => onOpenTask(proposal.taskId)}
+                >
+                  Открыть задачу
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </Section>
 
     <AccountBack onBack={onBack} />
