@@ -114,6 +114,28 @@ const parseTotalUsers = (input: unknown): number | null => {
   return Math.floor(value);
 };
 
+const parseTotalFromPagination = (input: unknown): number | null => {
+  if (typeof input !== "object" || input === null) {
+    return null;
+  }
+
+  const pagination = (input as { pagination?: unknown }).pagination;
+  if (typeof pagination !== "object" || pagination === null) {
+    return null;
+  }
+
+  const total = (pagination as { total?: unknown }).total;
+  if (typeof total !== "number" || !Number.isFinite(total)) {
+    return null;
+  }
+
+  if (total < 0) {
+    return null;
+  }
+
+  return Math.floor(total);
+};
+
 function App() {
   const webAppState = useMemo(() => getSafeState(), []);
   const profileAcronym = useMemo(
@@ -376,20 +398,42 @@ function App() {
   );
 
   const requestPlatformStats = useCallback(async (authToken: string) => {
-    const secureResponse = await apiRequest<unknown>(
-      "/profile/platform-stats",
-      {},
-      authToken,
-    );
-    const secureValue = parseTotalUsers(secureResponse);
-    if (secureValue !== null) {
-      return secureValue;
+    try {
+      const secureResponse = await apiRequest<unknown>(
+        "/profile/platform-stats",
+        {},
+        authToken,
+      );
+      const secureValue = parseTotalUsers(secureResponse);
+      if (secureValue !== null) {
+        return secureValue;
+      }
+    } catch {
+      // try next source
     }
 
-    const fallbackResponse = await apiRequest<unknown>("/stats");
-    const fallbackValue = parseTotalUsers(fallbackResponse);
-    if (fallbackValue !== null) {
-      return fallbackValue;
+    try {
+      const adminResponse = await apiRequest<unknown>(
+        "/admin/users?page=1&limit=1",
+        {},
+        authToken,
+      );
+      const adminValue = parseTotalFromPagination(adminResponse);
+      if (adminValue !== null) {
+        return adminValue;
+      }
+    } catch {
+      // try final source
+    }
+
+    try {
+      const fallbackResponse = await apiRequest<unknown>("/stats");
+      const fallbackValue = parseTotalUsers(fallbackResponse);
+      if (fallbackValue !== null) {
+        return fallbackValue;
+      }
+    } catch {
+      // no-op
     }
 
     throw new Error("Не удалось получить количество пользователей");

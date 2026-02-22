@@ -483,25 +483,29 @@ profileRouter.get("/platform-stats", requireAuth, async (_req, res, next) => {
   }
 });
 
-profileRouter.get("/:userId", requireAuth, async (req, res, next) => {
-  try {
-    const userIdRaw = req.params.userId;
+profileRouter.get(
+  "/:userId([0-9a-fA-F-]{36})",
+  requireAuth,
+  async (req, res, next) => {
+    try {
+      const userIdRaw = req.params.userId;
 
-    assertValidation(
-      typeof userIdRaw === "string",
-      "userId must be a valid UUID",
-    );
+      assertValidation(
+        typeof userIdRaw === "string",
+        "userId must be a valid UUID",
+      );
 
-    const userId = userIdRaw as string;
+      const userId = userIdRaw as string;
 
-    assertValidation(isUuid(userId), "userId must be a valid UUID");
+      assertValidation(isUuid(userId), "userId must be a valid UUID");
 
-    const user = await getUserById(userId);
+      const user = await getUserById(userId);
 
-    res.status(200).json({
-      user: mapPublicUser(user),
-    });
-  } catch (error) {
-    next(error);
-  }
-});
+      res.status(200).json({
+        user: mapPublicUser(user),
+      });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
