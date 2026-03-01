@@ -93,3 +93,7 @@ npm run dev
 ```
 
 Frontend URL: `http://localhost:5173`
+
+Landing in a regular browser uses the bot username from `backend/.env`
+(`TELEGRAM_BOT_USERNAME`). If needed, you can override it for frontend build
+with `VITE_TELEGRAM_BOT_USERNAME`.

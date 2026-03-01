@@ -2,11 +2,45 @@ import WebApp from "@twa-dev/sdk";
 
 import type { TgUser, WebAppState } from "../../entities/user/model/types";
 
+type TelegramWindow = Window & {
+  Telegram?: {
+    WebApp?: {
+      initData?: string;
+      initDataUnsafe?: {
+        user?: TgUser;
+        start_param?: string;
+      };
+    };
+  };
+};
+
+const getTelegramWebApp = () =>
+  (window as TelegramWindow).Telegram?.WebApp;
+
+const normalizeBotUsername = (value: string | undefined): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().replace(/^@/, "");
+  return normalized.length > 0 ? normalized : null;
+};
+
+export const isTelegramWebAppContext = (): boolean => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const telegramWebApp = getTelegramWebApp();
+  const hasInitData =
+    typeof telegramWebApp?.initData === "string" &&
+    telegramWebApp.initData.length > 0;
+
+  return Boolean(hasInitData || telegramWebApp?.initDataUnsafe?.user);
+};
+
 export const getSafeState = (): WebAppState => {
-  if (
-    typeof window === "undefined" ||
-    !(window as Window & { Telegram?: unknown }).Telegram
-  ) {
+  if (typeof window === "undefined" || !getTelegramWebApp()) {
     return {
       isTelegram: false,
       platform: "web",
@@ -72,4 +106,24 @@ export const getDisplayAcronym = (displayName: string): string => {
   }
 
   return "TG";
+};
+
+export const getTelegramBotUsername = (): string | null => {
+  const fromFrontendEnv = normalizeBotUsername(
+    import.meta.env.VITE_TELEGRAM_BOT_USERNAME,
+  );
+  if (fromFrontendEnv) {
+    return fromFrontendEnv;
+  }
+
+  return normalizeBotUsername(__TG_BOT_USERNAME__);
+};
+
+export const getTelegramBotUrl = (startApp = "landing"): string | null => {
+  const botUsername = getTelegramBotUsername();
+  if (!botUsername) {
+    return null;
+  }
+
+  return `https://t.me/${botUsername}?startapp=${encodeURIComponent(startApp)}`;
 };
