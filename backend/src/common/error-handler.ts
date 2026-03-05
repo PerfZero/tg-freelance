@@ -54,17 +54,16 @@ export const errorHandler = (
           ? error.stack
           : undefined,
     });
+    logger.error("request.error", {
+      ...errorLogContext,
+      stack:
+        error instanceof Error && env.nodeEnv !== "production"
+          ? error.stack
+          : undefined,
+    });
   } else if (knownError.status >= 400) {
     logger.warn("audit.http_error_4xx", errorLogContext);
   }
-
-  logger.error("request.error", {
-    ...errorLogContext,
-    stack:
-      error instanceof Error && env.nodeEnv !== "production"
-        ? error.stack
-        : undefined,
-  });
 
   res.status(knownError.status).json({
     error: {
